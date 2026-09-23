@@ -1,7 +1,7 @@
 # Almena Wallet — notes for contributors and agents
 
-The user's app for Almena Network, a decentralised messaging platform based on DIDComm Messaging v2.1
-(https://identity.foundation/didcomm-messaging/spec/v2.1/). It talks to an Almena node (`../node`).
+The user's app for Almena Network, a decentralised messaging platform based on DIDComm Messaging v2.0
+(https://identity.foundation/didcomm-messaging/spec/v2.0/). It talks to an Almena node (`../node`).
 
 This project is independent: it has its own tooling and shares nothing with `../node` except the protocol.
 
