@@ -1,51 +1,43 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+import { LiquidTabBar, type TabDefinition } from "./components/LiquidTabBar";
+import { HomeIcon, MessagesIcon, SettingsIcon } from "./components/icons";
+import { useI18n } from "./i18n";
+import { useAccent } from "./appearance";
+import { useBackdrop } from "./backdrop";
+import { useTheme } from "./theme";
+import { HomeScreen } from "./screens/HomeScreen";
+import { MessagesScreen } from "./screens/MessagesScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+type Route = "home" | "messages" | "settings";
+
+export default function App() {
+  const { t } = useI18n();
+  // Applied for the tokens they put on the root element; nothing chooses them
+  // yet, so the stored or default palette is what is worn.
+  useAccent();
+  const { theme } = useTheme();
+  // The window behind the page wears the page's colour — see `backdrop`. Read
+  // after `useTheme`, because it reads the palette that hook just applied.
+  useBackdrop(theme, false);
+  const [route, setRoute] = useState<Route>("home");
+
+  const tabs: TabDefinition<Route>[] = [
+    { id: "home", label: t.nav.home, icon: <HomeIcon /> },
+    { id: "messages", label: t.nav.messages, icon: <MessagesIcon /> },
+    { id: "settings", label: t.nav.settings, icon: <SettingsIcon /> },
+  ];
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="app">
+      <main className="app__view" key={route}>
+        {route === "home" ? <HomeScreen /> : null}
+        {route === "messages" ? <MessagesScreen /> : null}
+        {route === "settings" ? <SettingsScreen /> : null}
+      </main>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      <LiquidTabBar label={t.nav.label} tabs={tabs} active={route} onSelect={setRoute} />
+    </div>
   );
 }
-
-export default App;

@@ -9,6 +9,11 @@ This project is independent: it has its own tooling and shares nothing with `../
 
 - `src/` — React + TypeScript front end (Vite). Package manager: pnpm.
 - `src-tauri/` — Tauri v2 Rust side (`wallet_lib`).
+- `src-tauri/gen/android`, `src-tauri/gen/apple` — native projects from `tauri android|ios init`; regenerated, so settings that must survive live in `src-tauri/Info.ios.plist` and the Taskfile.
+- `assets/branding/` — source artwork; `task icons` regenerates `src-tauri/icons` and `public/brand`. Android launcher icons under `src-tauri/icons/android` are hand-drawn.
+- `src/styles/global.css` — the only place a colour is written; palettes keyed by `data-theme` and `data-accent` on the root.
+
+The look follows the previous Almena ID wallet (github.com/almena-id/wallet, branch `develop`).
 
 ## Rules
 

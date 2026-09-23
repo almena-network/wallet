@@ -4149,6 +4149,8 @@ dependencies = [
 name = "wallet"
 version = "0.1.0"
 dependencies = [
+ "objc2",
+ "objc2-ui-kit",
  "serde",
  "serde_json",
  "tauri",

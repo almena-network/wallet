@@ -1,0 +1,28 @@
+{
+  "app": {
+    "name": "Almena Wallet"
+  },
+  "nav": {
+    "label": "Main sections",
+    "home": "Home",
+    "messages": "Messages",
+    "settings": "Settings"
+  },
+  "home": {
+    "greeting": "Your wallet",
+    "credentials": {
+      "title": "Credentials",
+      "empty": "No credentials yet",
+      "emptyHint": "Credentials issued to you will show up here."
+    }
+  },
+  "messages": {
+    "title": "Messages",
+    "empty": "No messages yet",
+    "emptyHint": "Conversations you open will show up here."
+  },
+  "settings": {
+    "title": "Settings",
+    "empty": "Nothing to adjust yet"
+  }
+}

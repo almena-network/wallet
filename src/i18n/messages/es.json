@@ -1,0 +1,28 @@
+{
+  "app": {
+    "name": "Almena Wallet"
+  },
+  "nav": {
+    "label": "Secciones principales",
+    "home": "Inicio",
+    "messages": "Mensajes",
+    "settings": "Ajustes"
+  },
+  "home": {
+    "greeting": "Tu cartera",
+    "credentials": {
+      "title": "Credenciales",
+      "empty": "Todavía no hay credenciales",
+      "emptyHint": "Las credenciales que te emitan aparecerán aquí."
+    }
+  },
+  "messages": {
+    "title": "Mensajes",
+    "empty": "Todavía no hay mensajes",
+    "emptyHint": "Las conversaciones que abras aparecerán aquí."
+  },
+  "settings": {
+    "title": "Ajustes",
+    "empty": "Todavía no hay nada que ajustar"
+  }
+}

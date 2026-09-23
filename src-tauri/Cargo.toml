@@ -1,8 +1,9 @@
 [package]
 name = "wallet"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Almena Wallet"
+authors = ["Almena Network"]
+license = "Apache-2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -23,6 +24,18 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+[target.'cfg(target_os = "ios")'.dependencies]
+# Turning down the second window an iPad offers — see `scene.rs`. The same
+# `objc2-ui-kit` Tauri itself is built on, with only the pieces that ask the
+# application to destroy a scene session.
+objc2 = "0.6"
+objc2-ui-kit = { version = "0.3", default-features = false, features = [
+    "UIApplication",
+    "UIScene",
+    "UISceneSession",
+    "UISceneOptions",
+    "block2",
+] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

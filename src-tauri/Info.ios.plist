@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The scene lifecycle, declared so that the wallet launches at all.
+
+	     UIKit on the iOS 27 SDK refuses to start an application that has not
+	     adopted UIScene: the launch-time check reads this manifest and traps
+	     when it finds none. tao, the window layer under Tauri, installs its
+	     scene delegate only when the manifest says the application supports
+	     multiple scenes, so the flag is true even though the wallet wants one
+	     window; `src/scene.rs` turns down the second one an iPad offers.
+	     See tauri-apps/tauri#15719. -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>TaoSceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<!-- Portrait on a phone; a tablet keeps every orientation. Declared here as
+	     well as in the generated project because `tauri ios init` regenerates
+	     that one and not this file. -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
