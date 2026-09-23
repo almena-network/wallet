@@ -1,0 +1,81 @@
+# https://taskfile.dev
+version: "3"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  install:
+    desc: Install front-end dependencies
+    cmds:
+      - pnpm install
+    sources:
+      - package.json
+      - pnpm-lock.yaml
+    generates:
+      - node_modules/.modules.yaml
+
+  dev:
+    desc: Run the wallet as a desktop app with hot reload
+    deps: [install]
+    cmds:
+      - pnpm tauri dev
+
+  dev:web:
+    desc: Run only the front end in the browser (no Tauri APIs)
+    deps: [install]
+    cmds:
+      - pnpm dev
+
+  build:
+    desc: Build the installable desktop app (src-tauri/target/release/bundle)
+    deps: [install]
+    cmds:
+      - pnpm tauri build
+
+  build:web:
+    desc: Type-check and build only the front end (dist/)
+    deps: [install]
+    cmds:
+      - pnpm build
+
+  test:
+    desc: Run the Rust tests
+    dir: src-tauri
+    cmds:
+      - cargo test {{.CLI_ARGS}}
+
+  fmt:
+    desc: Format the Rust code
+    dir: src-tauri
+    cmds:
+      - cargo fmt
+
+  lint:
+    desc: Type-check the front end, check Rust formatting and run clippy
+    deps: [install]
+    cmds:
+      - pnpm exec tsc --noEmit
+      - cd src-tauri && cargo fmt --check
+      - cd src-tauri && cargo clippy --all-targets -- -D warnings
+
+  check:
+    desc: Everything that must pass before finishing a change (lint + test)
+    cmds:
+      - task: lint
+      - task: test
+
+  clean:
+    desc: Remove build output (dist/, src-tauri/target)
+    cmds:
+      - rm -rf dist
+      - cd src-tauri && cargo clean
+
+  clean:all:
+    desc: clean, plus node_modules
+    cmds:
+      - task: clean
+      - rm -rf node_modules
