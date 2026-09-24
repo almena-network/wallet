@@ -6,8 +6,12 @@ messages through an Almena [mediator](https://github.com/almena-network/mediator
 One code base, built with Tauri v2, Vite and React, runs on Android, iOS,
 macOS, Linux and Windows.
 
-It is at the scaffold stage: the shell, the look and the build for every
-platform are in place; the screens (Home, Messages, Settings) are still empty.
+It is at an early stage: the shell, the look and the build for every platform
+are in place, and so is onboarding — creating an identity from a new BIP-39
+phrase or bringing one back from an existing phrase, then keeping it on the
+device encrypted behind a PIN — and connecting to a mediator: the wallet asks
+it for mediation, registers an inbox DID derived from the phrase, and can ask
+how many messages are waiting. Reading and sending messages is next.
 
 ## Requirements
 

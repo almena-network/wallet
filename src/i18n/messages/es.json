@@ -1,12 +1,14 @@
 {
   "app": {
-    "name": "Almena Wallet"
+    "name": "Almena Wallet",
+    "shortName": "Almena"
   },
   "nav": {
     "label": "Secciones principales",
     "home": "Inicio",
     "messages": "Mensajes",
-    "settings": "Ajustes"
+    "settings": "Ajustes",
+    "back": "Volver"
   },
   "home": {
     "greeting": "Tu cartera",
@@ -23,6 +25,163 @@
   },
   "settings": {
     "title": "Ajustes",
-    "empty": "Todavía no hay nada que ajustar"
+    "security": {
+      "title": "Seguridad",
+      "pinLabel": "PIN",
+      "pinDigits": "{digits} dígitos",
+      "pinLength": "¿De cuántos dígitos?",
+      "pinLengthFour": "4 dígitos",
+      "pinLengthSix": "6 dígitos",
+      "signOutTitle": "Cerrar la sesión",
+      "signOut": "Cerrar la sesión",
+      "keptLabel": "Guardada en",
+      "keptInStore": "El almacén de secretos del propio dispositivo",
+      "keptInFile": "El almacenamiento privado de esta aplicación"
+    },
+    "mediator": {
+      "title": "Mediador",
+      "none": "Sin conectar. Un mediador guarda tus mensajes mientras este dispositivo está desconectado, y es la dirección en la que te encuentran los demás. No puede leerlos: van cifrados para ti.",
+      "connect": "Conectar con un mediador",
+      "nameLabel": "Conectado a",
+      "waitingLabel": "Esperando",
+      "waiting": {
+        "one": "{count} mensaje",
+        "other": "{count} mensajes"
+      },
+      "waitingUnknown": "—",
+      "check": "Buscar mensajes",
+      "checking": "Buscando…",
+      "disconnect": "Desconectar"
+    }
+  },
+  "onboarding": {
+    "welcome": {
+      "tagline": "Tu identidad y tus conversaciones, en tu poder y en el de nadie más.",
+      "create": "Crear una identidad",
+      "createHint": "Una frase que solo tú tienes y una identidad que solo tú puedes usar",
+      "signIn": "Ya tengo una frase",
+      "signInHint": "Recupera una identidad con las palabras que anotaste"
+    },
+    "phrase": {
+      "title": {
+        "other": "Tus {count} palabras"
+      },
+      "length": "Cuántas palabras tiene la frase",
+      "lengthOption": {
+        "other": "{count} palabras"
+      },
+      "intro": {
+        "other": "Estas {count} palabras son la identidad. Anótalas en este orden y guárdalas donde solo llegues tú."
+      },
+      "warning": "Nadie puede devolvértelas. Quien las tenga tiene la identidad, y perderlas es perderla.",
+      "copy": "Copiar la frase",
+      "copied": "Copiada",
+      "acknowledge": {
+        "other": "He anotado las {count} palabras y las tengo conmigo"
+      },
+      "continue": "Continuar",
+      "restarted": "Esa no era la palabra que se pedía. Estas son palabras nuevas: las anteriores ya no valen, anótalas antes de seguir."
+    },
+    "confirm": {
+      "title": "Comprueba lo que has anotado",
+      "intro": "Elige la palabra que va en cada posición, leyendo de la copia que guardas.",
+      "progress": "{current} de {total}",
+      "question": "¿Cuál es la palabra número {position}?",
+      "warning": {
+        "other": "Un fallo empieza todo otra vez, con {count} palabras nuevas que anotar."
+      }
+    },
+    "restore": {
+      "title": "Tu frase",
+      "intro": "Escribe tu frase en el orden en que la anotaste. Doce palabras o veinticuatro, las que tengas, y en el idioma en que la creaste.",
+      "placeholder": "palabra uno, palabra dos, …",
+      "submit": "Recuperar la identidad"
+    },
+    "creating": {
+      "title": "Creando la identidad"
+    },
+    "errors": {
+      "identity_entropy_unavailable": "Este dispositivo no ha proporcionado la aleatoriedad con la que se crea una frase. No se ha creado nada.",
+      "identity_word_count": "Una frase tiene doce palabras o veinticuatro.",
+      "identity_checksum": "Esas palabras no son una frase que esta cartera haya producido. Revisa la ortografía y el orden.",
+      "identity_no_draft": "No había ninguna frase que confirmar. Empieza de nuevo.",
+      "identity_unknown": "No se ha podido crear la identidad. Inténtalo otra vez."
+    },
+    "protect": {
+      "title": "Elige un PIN",
+      "intro": "La identidad queda escrita en este dispositivo, cifrada, y estos dígitos son los que la abren. No hay nada que los restablezca: olvidar el PIN es empezar de nuevo desde tu frase.",
+      "saving": "Protegiendo tu identidad"
+    }
+  },
+  "pin": {
+    "chooseTitle": "Elige un PIN",
+    "chooseSubtitle": "{digits} dígitos, y este dispositivo es el único que los va a comprobar.",
+    "repeatTitle": "Escríbelo otra vez",
+    "repeatSubtitle": "Para que un desliz no se convierta en un candado que nadie abre.",
+    "unlockTitle": "Tu PIN",
+    "unlockSubtitle": "La cartera está bloqueada.",
+    "mismatch": "Esos dos no coinciden. Empieza de nuevo.",
+    "delete": "Borrar",
+    "attemptsLeft": {
+      "one": "Queda {count} intento. Cuando se acabe, la identidad se retira de este dispositivo y tu frase es la vuelta atrás.",
+      "other": "Quedan {count} intentos. Cuando se acaben, la identidad se retira de este dispositivo y tu frase es la vuelta atrás."
+    },
+    "checking": "Comprobando tu PIN"
+  },
+  "vault": {
+    "errors": {
+      "vault_wrong_pin": "Ese no es el PIN.",
+      "vault_destroyed": "Ese era el último intento. La identidad se ha retirado de este dispositivo, y tu frase es la vuelta atrás.",
+      "vault_nothing": "En este dispositivo no hay ninguna identidad.",
+      "vault_exists": "Este dispositivo ya tiene una identidad.",
+      "vault_pin_length": "Un PIN son cuatro o seis dígitos.",
+      "vault_pin_not_digits": "Un PIN son dígitos y nada más.",
+      "vault_no_identity": "No hay ninguna identidad abierta que escribir.",
+      "vault_unreadable": "Lo que hay en este dispositivo no es algo que esta cartera sepa leer.",
+      "vault_too_new": "Esto lo escribió una versión más nueva de la cartera. Actualízala y la identidad seguirá aquí.",
+      "vault_storage": "No se ha podido leer la identidad de este dispositivo. No se ha cambiado nada.",
+      "vault_entropy": "Este dispositivo no ha dado la aleatoriedad que necesita el cifrado. No se ha escrito nada.",
+      "vault_unknown": "Eso no ha funcionado. Inténtalo otra vez."
+    },
+    "problem": {
+      "title": "Este dispositivo tiene una identidad que no puede abrir",
+      "body": "No se ha perdido nada y no se ha cambiado nada. Hasta que esto se resuelva, la cartera no va a ofrecerte crear una segunda identidad encima de la que ya hay.",
+      "retry": "Reintentar"
+    }
+  },
+  "logout": {
+    "title": "Cerrar la sesión",
+    "intro": "Léelo antes de hacerlo. No hay ningún soporte que pueda deshacerlo.",
+    "identity": "La identidad se va. La tiene este dispositivo y nadie más: ni quien hace la cartera, ni el mediador, ni una copia guardada en ningún sitio.",
+    "messages": "Tus conversaciones se van con ella. Estaban cifradas para esta identidad, y sin ella nada puede leerlas.",
+    "phrase": "Tu frase es la única vuelta atrás. Con ella la identidad vuelve tal cual, en este dispositivo o en otro. Sin ella se ha perdido, y perdida es para siempre.",
+    "question": "¿Tienes tu frase delante?",
+    "waiting": "Podrás cerrar la sesión en {seconds} s",
+    "slide": "Desliza para cerrar la sesión",
+    "slideDone": "Cerrando la sesión",
+    "cancel": "Seguir con la sesión abierta"
+  },
+  "mediator": {
+    "title": "Conectar con un mediador",
+    "intro": "Pega el enlace de invitación que muestra un mediador, o su dirección. El de abajo es el de Almena.",
+    "label": "Enlace de invitación o dirección",
+    "placeholder": "https://mediator.example.com",
+    "submit": "Conectar",
+    "connecting": "Conectando con el mediador"
+  },
+  "messaging": {
+    "errors": {
+      "messaging_locked": "La cartera está bloqueada. Desbloquéala e inténtalo otra vez.",
+      "messaging_invitation_unreadable": "Eso no es un enlace de invitación, una dirección ni un DID de un mediador.",
+      "messaging_insecure": "Ese mediador no usa HTTPS, así que esta cartera no va a hablar con él.",
+      "messaging_mediator_unreachable": "No se ha podido contactar con el mediador. Revisa la conexión y la dirección, e inténtalo otra vez.",
+      "messaging_mediator_refused": "El mediador ha rechazado la petición.",
+      "messaging_not_connected": "Esta cartera no está conectada a ningún mediador.",
+      "messaging_keys": "No se han podido usar las claves para hablar con el mediador.",
+      "messaging_unreadable": "No se ha podido leer lo que este dispositivo guarda sobre el mediador.",
+      "messaging_storage": "No se ha podido guardar el mediador en este dispositivo.",
+      "messaging_entropy": "Este dispositivo no ha dado la aleatoriedad que necesita el cifrado. No se ha escrito nada.",
+      "messaging_unknown": "Eso no ha funcionado. Inténtalo otra vez."
+    }
   }
 }

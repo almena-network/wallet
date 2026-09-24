@@ -1,12 +1,14 @@
 {
   "app": {
-    "name": "Almena Wallet"
+    "name": "Almena Wallet",
+    "shortName": "Almena"
   },
   "nav": {
     "label": "Main sections",
     "home": "Home",
     "messages": "Messages",
-    "settings": "Settings"
+    "settings": "Settings",
+    "back": "Back"
   },
   "home": {
     "greeting": "Your wallet",
@@ -23,6 +25,163 @@
   },
   "settings": {
     "title": "Settings",
-    "empty": "Nothing to adjust yet"
+    "security": {
+      "title": "Security",
+      "pinLabel": "PIN",
+      "pinDigits": "{digits} digits",
+      "pinLength": "How long?",
+      "pinLengthFour": "4 digits",
+      "pinLengthSix": "6 digits",
+      "signOutTitle": "Sign out",
+      "signOut": "Sign out",
+      "keptLabel": "Kept in",
+      "keptInStore": "This device's own secret store",
+      "keptInFile": "This application's private storage"
+    },
+    "mediator": {
+      "title": "Mediator",
+      "none": "Not connected. A mediator holds your messages while this device is offline, and it is the address others reach you at. It cannot read them: they are encrypted to you.",
+      "connect": "Connect to a mediator",
+      "nameLabel": "Connected to",
+      "waitingLabel": "Waiting",
+      "waiting": {
+        "one": "{count} message",
+        "other": "{count} messages"
+      },
+      "waitingUnknown": "—",
+      "check": "Check for messages",
+      "checking": "Checking…",
+      "disconnect": "Disconnect"
+    }
+  },
+  "onboarding": {
+    "welcome": {
+      "tagline": "Your identity and your conversations, held by you and nobody else.",
+      "create": "Create an identity",
+      "createHint": "A phrase only you hold, and an identity only you can use",
+      "signIn": "I already have a phrase",
+      "signInHint": "Bring an identity back from the words you wrote down"
+    },
+    "phrase": {
+      "title": {
+        "other": "Your {count} words"
+      },
+      "length": "How long the phrase is",
+      "lengthOption": {
+        "other": "{count} words"
+      },
+      "intro": {
+        "other": "These {count} words are the identity. Write them down, in this order, and keep them somewhere only you reach."
+      },
+      "warning": "Nobody can give them back to you. Whoever has them has the identity, and losing them loses it.",
+      "copy": "Copy the phrase",
+      "copied": "Copied",
+      "acknowledge": {
+        "other": "I have written the {count} words down and I have them with me"
+      },
+      "continue": "Continue",
+      "restarted": "That was not the word asked for. These are new words: the old ones are gone, so write these down before going on."
+    },
+    "confirm": {
+      "title": "Check what you wrote",
+      "intro": "Pick the word that goes in each position, reading from the copy you keep.",
+      "progress": "{current} of {total}",
+      "question": "Which word is number {position}?",
+      "warning": {
+        "other": "One wrong answer starts the whole thing again, with {count} new words to write down."
+      }
+    },
+    "restore": {
+      "title": "Your phrase",
+      "intro": "Write your phrase in the order you wrote it down. Twelve words or twenty-four, whichever you have — and in whichever language you made it.",
+      "placeholder": "word one, word two, …",
+      "submit": "Bring the identity back"
+    },
+    "creating": {
+      "title": "Making the identity"
+    },
+    "errors": {
+      "identity_entropy_unavailable": "This device would not supply the randomness a phrase is made from. Nothing has been created.",
+      "identity_word_count": "A phrase has twelve words or twenty-four.",
+      "identity_checksum": "Those words are not a phrase this wallet ever produced. Check the spelling and the order.",
+      "identity_no_draft": "There was no phrase to confirm. Start again.",
+      "identity_unknown": "The identity could not be made. Try again."
+    },
+    "protect": {
+      "title": "Choose a PIN",
+      "intro": "The identity is written down on this device now, encrypted, and these digits are what open it. There is nothing that can reset them: forgetting the PIN means starting again from your phrase.",
+      "saving": "Protecting your identity"
+    }
+  },
+  "pin": {
+    "chooseTitle": "Choose a PIN",
+    "chooseSubtitle": "{digits} digits, and this device is the only one that will ever check them.",
+    "repeatTitle": "Type it again",
+    "repeatSubtitle": "So a slip does not become a lock nobody can open.",
+    "unlockTitle": "Your PIN",
+    "unlockSubtitle": "The wallet is locked.",
+    "mismatch": "Those two do not match. Start again.",
+    "delete": "Delete",
+    "attemptsLeft": {
+      "one": "{count} attempt left. When it is gone the identity is removed from this device, and your phrase is the way back.",
+      "other": "{count} attempts left. When they are gone the identity is removed from this device, and your phrase is the way back."
+    },
+    "checking": "Checking your PIN"
+  },
+  "vault": {
+    "errors": {
+      "vault_wrong_pin": "That is not the PIN.",
+      "vault_destroyed": "That was the last attempt. The identity has been removed from this device, and your phrase is the way back.",
+      "vault_nothing": "There is no identity on this device.",
+      "vault_exists": "This device is already holding an identity.",
+      "vault_pin_length": "A PIN is four or six digits.",
+      "vault_pin_not_digits": "A PIN is digits and nothing else.",
+      "vault_no_identity": "There is no identity open to write down.",
+      "vault_unreadable": "What is on this device is not something this wallet can read.",
+      "vault_too_new": "This was written by a newer version of the wallet. Update it, and the identity will be here.",
+      "vault_storage": "The identity could not be read from this device. Nothing has been changed.",
+      "vault_entropy": "This device would not supply the randomness the encryption needs. Nothing has been written.",
+      "vault_unknown": "That did not work. Try again."
+    },
+    "problem": {
+      "title": "This device is holding an identity it cannot open",
+      "body": "Nothing has been lost and nothing has been changed. Until this is answered the wallet will not offer to create a second identity over the one already here.",
+      "retry": "Try again"
+    }
+  },
+  "logout": {
+    "title": "Sign out",
+    "intro": "Read this before you do. There is no support line that can undo it.",
+    "identity": "The identity goes. This device is holding it and nothing else is: not the wallet’s makers, not the mediator, not a backup somewhere.",
+    "messages": "Your conversations go with it. They were encrypted to this identity, and nothing without it can read them.",
+    "phrase": "Your phrase is the only way back. With it the identity comes back exactly as it was, on this device or any other. Without it it is gone, and gone is permanent.",
+    "question": "Do you have your phrase in front of you?",
+    "waiting": "You can sign out in {seconds} s",
+    "slide": "Slide to sign out",
+    "slideDone": "Signing out",
+    "cancel": "Stay signed in"
+  },
+  "mediator": {
+    "title": "Connect to a mediator",
+    "intro": "Paste the invitation link a mediator shows, or its address. The one below is Almena's own.",
+    "label": "Invitation link or address",
+    "placeholder": "https://mediator.example.com",
+    "submit": "Connect",
+    "connecting": "Connecting to the mediator"
+  },
+  "messaging": {
+    "errors": {
+      "messaging_locked": "The wallet is locked. Unlock it and try again.",
+      "messaging_invitation_unreadable": "That is not a mediator's invitation link, address or DID.",
+      "messaging_insecure": "That mediator does not use HTTPS, so this wallet will not talk to it.",
+      "messaging_mediator_unreachable": "The mediator could not be reached. Check the connection and the address, and try again.",
+      "messaging_mediator_refused": "The mediator turned the request down.",
+      "messaging_not_connected": "This wallet is not connected to a mediator.",
+      "messaging_keys": "The keys for talking to the mediator could not be used.",
+      "messaging_unreadable": "What this device holds about the mediator could not be read.",
+      "messaging_storage": "The mediator could not be written down on this device.",
+      "messaging_entropy": "This device would not supply the randomness the encryption needs. Nothing has been written.",
+      "messaging_unknown": "That did not work. Try again."
+    }
   }
 }

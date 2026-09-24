@@ -25,3 +25,6 @@ dist-ssr
 
 # Task fingerprint cache and deploy scratch
 .task/
+
+# Local overrides for development (e.g. VITE_MEDIATOR)
+.env.local

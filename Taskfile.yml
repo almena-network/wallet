@@ -90,11 +90,34 @@ tasks:
   check:mobile:
     desc: Type-check the Rust the mobile builds compile, which the host check skips
     dir: src-tauri
+    vars:
+      # The same lookup as the Android tasks below; the anchor there is
+      # declared after this task, where YAML cannot reach it from here.
+      ANDROID_NDK:
+        sh: |
+          if [ -n "$NDK_HOME" ]; then echo "$NDK_HOME"; exit 0; fi
+          if [ -n "$ANDROID_NDK_HOME" ]; then echo "$ANDROID_NDK_HOME"; exit 0; fi
+          for dir in "$ANDROID_HOME" "$ANDROID_SDK_ROOT" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+            if [ -n "$dir" ] && [ -d "$dir/ndk" ]; then
+              ls -d "$dir"/ndk/*/ 2>/dev/null | sort -V | tail -1 | sed 's|/$||'
+              exit 0
+            fi
+          done
     cmds:
       # Everything behind `#[cfg(mobile)]` or `target_os = "ios"` is invisible
       # to a check for this computer.
       - cargo check --target aarch64-apple-ios-sim
-      - cargo check --target aarch64-linux-android
+      # `ring` (the TLS crypto) compiles C, so the check needs the NDK's clang,
+      # which the Tauri CLI would otherwise hand it during a real build.
+      - |
+        bin=$(ls -d '{{.ANDROID_NDK}}'/toolchains/llvm/prebuilt/*/bin 2>/dev/null | head -1)
+        if [ -z "$bin" ]; then
+          echo "No Android NDK found; install one from Android Studio's SDK Manager." >&2
+          exit 1
+        fi
+        export CC_aarch64_linux_android="$(ls "$bin"/aarch64-linux-android*-clang | sort -V | tail -1)"
+        export AR_aarch64_linux_android="$bin/llvm-ar"
+        cargo check --target aarch64-linux-android
 
   check:
     desc: Everything that must pass before finishing a change (lint + test)
