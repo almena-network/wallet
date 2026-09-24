@@ -87,9 +87,20 @@ and the window reopens where it was left.
 ## Links and codes
 
 `almena://` links — the wallet's own invitations are written that way — open
-the wallet on every platform. On a phone the Scan QR tab reads the same
-invitations, and a mediator's, from a code. On macOS a link only reaches an
-installed copy of the wallet (in `/Applications`), not one run with `task dev`.
+the wallet. On a phone the Scan QR tab reads the same invitations, and a
+mediator's, from a code. Who tells the system that the wallet opens them:
+
+| Platform | Registered by | Try it |
+|---|---|---|
+| iOS | `CFBundleURLTypes`, written into the app by the build | `xcrun simctl openurl booted "almena://invite?_oob=…"` |
+| Android | an `intent-filter` for the scheme, written by the build | `adb shell am start -a android.intent.action.VIEW -d "almena://invite?_oob=…"` |
+| macOS | `CFBundleURLSchemes` in the bundle; macOS learns it once the `.app` has been opened | `open "almena://invite?_oob=…"` |
+| Windows | the `.msi`/`.exe` installer (registry); a development build registers itself | open the link from Run (Win+R) or a browser |
+| Linux | the `.deb`/`.rpm` desktop entry; an AppImage registers itself at startup (needs `xdg-mime`) | `xdg-open "almena://invite?_oob=…"` |
+
+`task dev` on macOS is not a bundle, so links do not reach it. A link opened
+while the wallet runs goes to the running one: the phones deliver it, and on a
+computer `single-instance` hands it over.
 
 ## Push notifications
 

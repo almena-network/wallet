@@ -124,11 +124,14 @@ pub fn run() {
         // is refused on iOS. Only `write-text` is granted — see capabilities.
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
-            // Linux and Windows learn which app opens `almena://` from the app
-            // itself — an AppImage or a build run in development was never
-            // installed, so nothing else would tell them. macOS and the phones
-            // read it from the bundle.
-            #[cfg(any(windows, target_os = "linux"))]
+            // Who opens `almena://`, where the system is not told by the
+            // bundle. **Linux, always:** an AppImage is never installed, so the
+            // app registers itself (a `.desktop` handler and `xdg-mime`); a
+            // `.deb` or `.rpm` already declares it. **Windows, in development
+            // only:** the installer writes the registry keys, and a build run
+            // from `target/` must not take the scheme from the installed one.
+            // macOS and the phones read it from the bundle.
+            #[cfg(any(target_os = "linux", all(windows, debug_assertions)))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 let _ = app.deep_link().register_all();
