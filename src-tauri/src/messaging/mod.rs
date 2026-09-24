@@ -390,6 +390,73 @@ pub fn invitation_kind(input: String) -> &'static str {
     }
 }
 
+/// What the confirmation sheet shows about a link or a scanned code, read
+/// without acting on it — only what the wallet actually knows, since an
+/// invitation carries no name.
+#[derive(Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum LinkDetails {
+    /// Somebody's invitation: the fingerprint of the card it names, and what
+    /// this wallet already has with it.
+    Contact {
+        fingerprint: String,
+        /// The relationship already opened with that card, if there is one.
+        contact: Option<Contact>,
+        /// This wallet's own invitation.
+        own: bool,
+    },
+    /// A mediator's invitation, beside the mediation this wallet has.
+    Mediator {
+        mediator: String,
+        current: Option<String>,
+        /// Relationships whose DIDs route through the current mediator: a new
+        /// one would stop collecting what they send.
+        contacts: usize,
+    },
+    Unknown,
+}
+
+/// What a link or a scanned code is, with what this wallet knows about it.
+/// Reads the device only.
+#[tauri::command]
+pub fn link_details<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    input: String,
+) -> Result<LinkDetails, MessagingError> {
+    let seed = seed(&held)?;
+    let state = state::read(&app, &seed)?;
+
+    if let Ok(invitation) = contacts::read(&input) {
+        let own = state.mediation.as_ref().is_some_and(|mediation| {
+            Peer::card(&seed, &mediation.mediator).is_ok_and(|card| card.did == invitation.from)
+        });
+        return Ok(LinkDetails::Contact {
+            fingerprint: contacts::name(&invitation.from),
+            contact: state
+                .relationships
+                .iter()
+                .find(|r| r.origin == invitation.from)
+                .map(Contact::from),
+            own,
+        });
+    }
+    if let Ok(target) = mediator::target(&input) {
+        if target.invitation.is_some() {
+            return Ok(LinkDetails::Mediator {
+                mediator: target.did,
+                current: state.mediation.map(|m| m.mediator),
+                contacts: state.relationships.len(),
+            });
+        }
+    }
+    Ok(LinkDetails::Unknown)
+}
+
 /// Accepts somebody's invitation, and writes down the relationship it opens.
 #[tauri::command]
 pub async fn contact_accept<R: Runtime>(

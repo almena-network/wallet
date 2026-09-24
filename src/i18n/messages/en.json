@@ -44,6 +44,36 @@
       "unknown": "It is not an invitation this wallet can read."
     }
   },
+  "confirm": {
+    "origin": {
+      "qr": "QR code",
+      "link": "Link"
+    },
+    "cancel": "Cancel",
+    "accept": "Accept",
+    "contact": {
+      "title": "Contact invitation",
+      "lead": "Somebody wants to start a conversation with you.",
+      "fingerprint": "Fingerprint",
+      "reach": "They will know you by",
+      "reachValue": "An address for this relationship only",
+      "existing": "Already your contact",
+      "open": "Open conversation",
+      "own": "This is your own invitation. Share it with somebody else."
+    },
+    "mediator": {
+      "title": "Connect to a mediator",
+      "lead": "It will hold your messages while this device is offline.",
+      "mediator": "Mediator",
+      "current": "You use now",
+      "none": "None",
+      "same": "You are already connected to this mediator.",
+      "blocked": {
+        "one": "You have {count} contact through your current mediator. Changing it from a link is not possible yet: their messages would stop arriving.",
+        "other": "You have {count} contacts through your current mediator. Changing it from a link is not possible yet: their messages would stop arriving."
+      }
+    }
+  },
   "messages": {
     "title": "Messages",
     "newConversation": "New conversation",
@@ -115,7 +145,11 @@
         "other": "{count} minutes"
       },
       "deviceLockLabel": "Opens with",
-      "deviceLockValue": "Face ID or the iPhone passcode"
+      "deviceLockValue": "Face ID or the iPhone passcode",
+      "startTitle": "Starting up",
+      "startLabel": "Open at login",
+      "startHint": "Opens minimised, and locked until you unlock it",
+      "startError": "The system would not change that. Try again."
     },
     "profile": {
       "title": "Your name",

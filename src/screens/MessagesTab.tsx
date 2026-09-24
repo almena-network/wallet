@@ -16,9 +16,18 @@ type View =
   | { name: "conversation"; id: string; from: "inbox" | "new" }
   | { name: "contact"; id: string; from: "inbox" | "new" };
 
+type MessagesTabProps = {
+  /** A conversation to open on, when something outside the tab led to it. */
+  initialConversation?: string | null;
+};
+
 /** The Messages tab and the screens behind it. Each is left by its own back button. */
-export function MessagesTab() {
-  const [view, setView] = useState<View>({ name: "inbox" });
+export function MessagesTab({ initialConversation = null }: MessagesTabProps) {
+  const [view, setView] = useState<View>(
+    initialConversation
+      ? { name: "conversation", id: initialConversation, from: "inbox" }
+      : { name: "inbox" },
+  );
 
   switch (view.name) {
     case "new":

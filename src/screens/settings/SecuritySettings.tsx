@@ -1,10 +1,12 @@
 import { useState } from "react";
 
 import { autoLockMinutes, type AutoLock } from "../../autolock";
-import { BiometricIcon, KeypadIcon } from "../../components/icons";
+import { useAutostart } from "../../autostart";
+import { BiometricIcon, KeypadIcon, PowerIcon } from "../../components/icons";
 import { ChevronRow, ToggleRow } from "../../components/rows";
 import { useI18n } from "../../i18n";
 import { fill, plural } from "../../i18n/format";
+import { usePlatform } from "../../platform";
 import { errorCode, setVaultDevice, type Vault } from "../../vault";
 
 type SecuritySettingsProps = {
@@ -32,6 +34,10 @@ export function SecuritySettings({
   const [error, setError] = useState<string | null>(null);
 
   const { status } = vault;
+  // Only a computer starts things at login.
+  const desktop = usePlatform().kind === "desktop";
+  const autostart = useAutostart(desktop);
+  const [autostartError, setAutostartError] = useState<string | null>(null);
 
   const disarm = async () => {
     setError(null);
@@ -135,6 +141,30 @@ export function SecuritySettings({
 
         {error ? <p className="card__note card__note--warning">{error}</p> : null}
       </section>
+
+      {desktop ? (
+        <section className="card" aria-labelledby="security-start">
+          <h2 className="card__title" id="security-start">
+            {t.settings.security.startTitle}
+          </h2>
+          <ToggleRow
+            icon={<PowerIcon />}
+            label={t.settings.security.startLabel}
+            hint={t.settings.security.startHint}
+            on={autostart.enabled === true}
+            disabled={autostart.enabled === null}
+            onChange={(on) => {
+              setAutostartError(null);
+              autostart
+                .setEnabled(on)
+                .catch(() => setAutostartError(t.settings.security.startError));
+            }}
+          />
+          {autostartError ? (
+            <p className="card__note card__note--warning">{autostartError}</p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="card" aria-labelledby="security-sign-out">
         <h2 className="card__title" id="security-sign-out">

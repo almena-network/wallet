@@ -44,6 +44,36 @@
       "unknown": "No es una invitación que la cartera sepa leer."
     }
   },
+  "confirm": {
+    "origin": {
+      "qr": "Código QR",
+      "link": "Enlace"
+    },
+    "cancel": "Cancelar",
+    "accept": "Aceptar",
+    "contact": {
+      "title": "Invitación de contacto",
+      "lead": "Alguien quiere empezar una conversación contigo.",
+      "fingerprint": "Huella",
+      "reach": "Te conocerá por",
+      "reachValue": "Una dirección solo para esta relación",
+      "existing": "Ya es tu contacto",
+      "open": "Abrir conversación",
+      "own": "Es tu propia invitación. Compártela con otra persona."
+    },
+    "mediator": {
+      "title": "Conectar a un mediador",
+      "lead": "Guardará tus mensajes mientras este dispositivo no esté conectado.",
+      "mediator": "Mediador",
+      "current": "Ahora usas",
+      "none": "Ninguno",
+      "same": "Ya estás conectado a este mediador.",
+      "blocked": {
+        "one": "Tienes {count} contacto a través de tu mediador actual. Cambiarlo desde un enlace aún no es posible: dejarían de llegar sus mensajes.",
+        "other": "Tienes {count} contactos a través de tu mediador actual. Cambiarlo desde un enlace aún no es posible: dejarían de llegar sus mensajes."
+      }
+    }
+  },
   "messages": {
     "title": "Mensajes",
     "newConversation": "Nueva conversación",
@@ -115,7 +145,11 @@
         "other": "{count} minutos"
       },
       "deviceLockLabel": "Se abre con",
-      "deviceLockValue": "Face ID o el código del iPhone"
+      "deviceLockValue": "Face ID o el código del iPhone",
+      "startTitle": "Al arrancar",
+      "startLabel": "Abrir al iniciar sesión",
+      "startHint": "Se abre minimizada, y bloqueada hasta que entres",
+      "startError": "El sistema no ha permitido el cambio. Inténtalo otra vez."
     },
     "profile": {
       "title": "Tu nombre",

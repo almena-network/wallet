@@ -124,6 +124,9 @@ windows-native-keyring-store = "1"
 zbus-secret-service-keyring-store = "1"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+# Opening at login, when the person turns it on in Security; the wallet then
+# starts minimised (`window::MINIMIZED`).
+tauri-plugin-autostart = "2"
 # A computer runs one wallet: a second launch — or an `almena://` link opened
 # while it runs — goes to the one already open (`deep-link` forwards the URL).
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 
+import type { Contact } from "./contacts";
+
 /**
  * Links and codes from outside: an `almena://` link that opened the wallet, or
  * a code the scanner read. **Nothing from outside acts on the identity.** What
@@ -13,6 +15,31 @@ export type LinkKind = "contact" | "mediator" | "unknown";
 /** What a link or a code is, read on the Rust side without acting on it. */
 export function invitationKind(input: string): Promise<LinkKind> {
   return invoke<LinkKind>("invitation_kind", { input }).catch(() => "unknown");
+}
+
+/** What the confirmation sheet shows about a link or a code — see `link_details`. */
+export type LinkDetails =
+  | {
+      kind: "contact";
+      /** The fingerprint of the card the invitation names: it carries no name. */
+      fingerprint: string;
+      /** The relationship already opened with that card. */
+      contact: Contact | null;
+      /** This wallet's own invitation. */
+      own: boolean;
+    }
+  | {
+      kind: "mediator";
+      mediator: string;
+      current: string | null;
+      /** Relationships routed through the current mediator. */
+      contacts: number;
+    }
+  | { kind: "unknown" };
+
+/** What a link or a code is, with what this wallet knows about it. Needs the wallet open. */
+export function linkDetails(input: string): Promise<LinkDetails> {
+  return invoke<LinkDetails>("link_details", { input });
 }
 
 /**

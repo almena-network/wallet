@@ -60,6 +60,27 @@ export function ProfileIcon({ className }: IconProps) {
   );
 }
 
+/** A server: a mediator, which holds messages for the wallet. */
+export function ServerIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="4" y="4.5" width="16" height="6" rx="1.5" />
+      <rect x="4" y="13.5" width="16" height="6" rx="1.5" />
+      <path d="M7.5 7.5h.01M7.5 16.5h.01" />
+    </svg>
+  );
+}
+
+/** Power: the wallet starting with the computer. */
+export function PowerIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M12 4v7" />
+      <path d="M7.1 6.9a7 7 0 1 0 9.8 0" />
+    </svg>
+  );
+}
+
 export function CameraIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className}>

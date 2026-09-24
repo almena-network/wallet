@@ -10,6 +10,8 @@
 //!   one instance of an app and manages its window itself.
 //! - `barcode-scanner` only exists on a phone or a tablet, where there is a
 //!   camera the system lets an app drive to read a code.
+//! - `autostart` only exists on a computer: the Security switch that opens the
+//!   wallet at login, minimised.
 //! - `deep-link` exists everywhere: an `almena://` link — the scheme the
 //!   wallet's own invitations are written with — opens the wallet. On a
 //!   computer a link opened while it runs arrives through `single-instance`.
@@ -94,6 +96,15 @@ pub fn run() {
             .build(),
     );
 
+    // Opening at login, which Security turns on and off. The login item starts
+    // the wallet with `--minimized`, and `setup` below keeps it out of the way.
+    // A LaunchAgent on macOS, which needs no permission to run AppleScript.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        Some(vec![window::MINIMIZED]),
+    ));
+
     // The camera, where there is one the wallet may drive.
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
@@ -170,6 +181,7 @@ pub fn run() {
             messaging::contacts_list,
             messaging::invitation_show,
             messaging::invitation_kind,
+            messaging::link_details,
             messaging::contact_accept,
             messaging::messages_sync,
             messaging::conversation_read,
@@ -189,6 +201,16 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building the Almena Wallet")
         .run(|_app, _event| {
+            // Started by the login item: open, but minimised. Here and not in
+            // `setup`, which runs before the system has put the window on the
+            // screen — a window minimised then is shown anyway.
+            #[cfg(desktop)]
+            if let tauri::RunEvent::Ready = _event {
+                if std::env::args().any(|arg| arg == window::MINIMIZED) {
+                    window::minimize_main(_app);
+                }
+            }
+
             // The Dock icon of a wallet with no window on screen: the way back
             // that is neither the tray nor a second launch.
             #[cfg(target_os = "macos")]

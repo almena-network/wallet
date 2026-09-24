@@ -21,6 +21,10 @@ const MAIN_WINDOW: &str = "main";
 /// find it open.
 pub const SHOWN: &str = "window-shown";
 
+/// The argument the login item starts the wallet with, so it opens minimised
+/// rather than in somebody's face the moment they log in.
+pub const MINIMIZED: &str = "--minimized";
+
 /// The main window, or nothing when there is none.
 pub fn main<R: tauri::Runtime>(app: &AppHandle<R>) -> Option<Window<R>> {
     app.get_webview_window(MAIN_WINDOW)
@@ -48,6 +52,14 @@ pub fn show_main<R: tauri::Runtime>(app: &AppHandle<R>) {
     // to: what the interface does with it is check a clock, and a wallet whose
     // time ran out is one somebody must not be shown before it lets go.
     let _ = app.emit(SHOWN, ());
+}
+
+/// Minimises the window: started at login, the wallet is there to be opened
+/// from the Dock, the taskbar or the tray, not put in front of everything.
+pub fn minimize_main<R: tauri::Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = main(app) {
+        let _ = window.minimize();
+    }
 }
 
 /// Takes the window off the screen without ending the wallet.

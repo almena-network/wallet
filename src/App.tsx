@@ -23,11 +23,10 @@ import {
   openVaultWithDevice,
   useVault,
 } from "./vault";
-import { AcceptInvitationScreen } from "./screens/AcceptInvitationScreen";
 import { DeviceLockScreen } from "./screens/DeviceLockScreen";
 import { HomeScreen } from "./screens/HomeScreen";
+import { LinkSheet, type LinkOrigin } from "./screens/LinkSheet";
 import { LogoutScreen } from "./screens/LogoutScreen";
-import { MediatorConnectScreen } from "./screens/MediatorConnectScreen";
 import { MessagesTab } from "./screens/MessagesTab";
 import { PinScreen } from "./screens/PinScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
@@ -37,7 +36,7 @@ import { Onboarding } from "./screens/onboarding/Onboarding";
 type Route = "home" | "messages" | "scan" | "profile";
 
 /** An invitation that came from outside — a link or a code — waiting to be put to the person. */
-type Link = { kind: "contact" | "mediator"; url: string };
+type Link = { url: string; origin: LinkOrigin };
 
 export default function App() {
   const { t, locale } = useI18n();
@@ -69,19 +68,21 @@ export default function App() {
   // a stray tap there is a tap past the question.
   const [keypad, setKeypad] = useState(false);
 
-  // **Links and codes from outside go to a screen that asks, never straight to
-  // an action.** A `almena://` link that opened the wallet, or a code the
+  // **Links and codes from outside go to a sheet that asks, never straight to
+  // an action.** An `almena://` link that opened the wallet, or a code the
   // scanner read, is kept here until an identity is open — a link that arrives
-  // behind the lock waits for the PIN — and then shown on the screen that
-  // accepts an invitation or connects to a mediator, with the person deciding.
+  // behind the lock waits for the PIN — and then put to the person over the
+  // open screen, with Cancel and Accept (`LinkSheet`).
   const [link, setLink] = useState<Link | null>(null);
-  const openLink = useCallback(async (url: string) => {
-    const kind = await invitationKind(url);
-    if (kind !== "unknown") {
-      setLink({ kind, url });
+  const openLink = useCallback(async (url: string, origin: LinkOrigin) => {
+    if ((await invitationKind(url)) !== "unknown") {
+      setLink({ url, origin });
     }
   }, []);
-  useDeepLinks((url) => void openLink(url));
+  const closeLink = useCallback(() => setLink(null), []);
+  useDeepLinks((url) => void openLink(url, "link"));
+  // A conversation to open the Messages tab on, when a link led to one.
+  const [conversation, setConversation] = useState<string | null>(null);
   // Messages arrive live while an identity is open and the wallet is seen.
   useLive(identity !== null);
   // And while it is not running, the mediator notifies this device.
@@ -312,44 +313,21 @@ export default function App() {
     { id: "profile", label: t.nav.profile, icon: <ProfileIcon /> },
   ];
 
-  if (link) {
-    return (
-      <div className="app">
-        <main className="app__view" key="link">
-          {link.kind === "contact" ? (
-            <AcceptInvitationScreen
-              initial={link.url}
-              onBack={() => setLink(null)}
-              onAccepted={() => {
-                setLink(null);
-                setRoute("messages");
-              }}
-            />
-          ) : (
-            <MediatorConnectScreen
-              initial={link.url}
-              onBack={() => setLink(null)}
-              onConnected={() => {
-                setLink(null);
-                void registerPush();
-              }}
-            />
-          )}
-        </main>
-      </div>
-    );
-  }
+  const select = (next: Route) => {
+    setConversation(null);
+    setRoute(next);
+  };
 
   return (
     <div className={cameraPreview ? "app app--camera" : "app"}>
       <main className={keypad ? "app__view app__view--plain" : "app__view"} key={route}>
         {route === "home" ? <HomeScreen /> : null}
-        {route === "messages" ? <MessagesTab /> : null}
+        {route === "messages" ? <MessagesTab initialConversation={conversation} /> : null}
         {route === "scan" ? (
           <ScanScreen
             onBack={() => setRoute("home")}
             onPreviewChange={setCameraPreview}
-            onInvitation={(content) => void openLink(content)}
+            onInvitation={(content) => void openLink(content, "qr")}
           />
         ) : null}
         {route === "profile" ? (
@@ -368,8 +346,26 @@ export default function App() {
       </main>
 
       {keypad || cameraPreview ? null : (
-        <LiquidTabBar label={t.nav.label} tabs={tabs} active={route} onSelect={setRoute} />
+        <LiquidTabBar label={t.nav.label} tabs={tabs} active={route} onSelect={select} />
       )}
+
+      {link ? (
+        <LinkSheet
+          key={link.url}
+          url={link.url}
+          origin={link.origin}
+          onClose={closeLink}
+          onConversation={(id) => {
+            setLink(null);
+            setConversation(id);
+            setRoute("messages");
+          }}
+          onMediatorConnected={() => {
+            setLink(null);
+            void registerPush();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

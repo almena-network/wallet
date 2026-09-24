@@ -46,6 +46,21 @@ Installers are built on the platform they are for: `.app`/`.dmg` on macOS,
 `.deb`/`.rpm`/`.AppImage` on Linux, `.msi`/`.exe` on Windows. They land in
 `src-tauri/target/release/bundle`.
 
+### Signed macOS builds
+
+`task build` signs nothing, so it runs anywhere — and macOS keeps an unsigned
+wallet out of the keychain that holds the Touch ID key, so there the PIN is
+the only way in. Two tasks sign, with what `.env.local` names (see the top of
+`Taskfile.yml` for every variable):
+
+```bash
+task build:macos     # Apple Development + a development profile: Touch ID on this Mac
+task release:macos   # Developer ID + hardened runtime, notarized and stapled: to hand out
+```
+
+`release:macos` notarizes with an App Store Connect API key and checks the
+`.app` and the `.dmg` with Gatekeeper before it finishes.
+
 ## Android
 
 ```bash
@@ -82,7 +97,8 @@ The wallet lives on the system tray. Closing the window puts it away rather
 than ending it — messages keep arriving — and clicking the tray icon (or the
 Dock icon on macOS) brings it back; the tray's menu is where it is quit. A
 second launch brings the running one to the front instead of starting another,
-and the window reopens where it was left.
+and the window reopens where it was left. Profile → Security can have it open at
+login, minimised and locked.
 
 ## Links and codes
 
