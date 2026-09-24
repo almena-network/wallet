@@ -11,15 +11,11 @@
     "back": "Back"
   },
   "home": {
-    "greeting": "Your wallet",
-    "credentials": {
-      "title": "Credentials",
-      "empty": "No credentials yet",
-      "emptyHint": "Credentials issued to you will show up here."
-    }
+    "greeting": "Your wallet"
   },
   "messages": {
     "title": "Messages",
+    "newConversation": "New conversation",
     "empty": "No messages yet",
     "emptyHint": "Conversations you open will show up here."
   },
@@ -181,7 +177,47 @@
       "messaging_unreadable": "What this device holds about the mediator could not be read.",
       "messaging_storage": "The mediator could not be written down on this device.",
       "messaging_entropy": "This device would not supply the randomness the encryption needs. Nothing has been written.",
-      "messaging_unknown": "That did not work. Try again."
+      "messaging_unknown": "That did not work. Try again.",
+      "messaging_invitation_own": "That is your own invitation. Send it to somebody else.",
+      "messaging_counterparty_unreachable": "The other person could not be reached. Try again later."
+    }
+  },
+  "conversations": {
+    "new": {
+      "title": "New conversation",
+      "contacts": "Contacts",
+      "empty": "No contacts yet. Invite somebody, or accept their invitation.",
+      "pending": "Waiting for them to answer",
+      "since": "Since {date}",
+      "directory": {
+        "title": "Search the directory",
+        "label": "Name or alias",
+        "placeholder": "Who are you looking for?",
+        "search": "Search",
+        "unavailable": "The directory is not available yet. For now, share an invitation."
+      },
+      "invite": {
+        "title": "Invite somebody",
+        "hint": "Show your code to somebody in front of you, or send them the link. If they sent you theirs, accept it.",
+        "show": "Show my invitation",
+        "accept": "I have an invitation"
+      }
+    },
+    "invite": {
+      "title": "Your invitation",
+      "intro": "Whoever scans this code or opens this link can start a conversation with you. Each person gets an address of their own, so nobody can tell who else you talk to.",
+      "codeLabel": "Your invitation as a QR code",
+      "preparing": "Preparing your invitation",
+      "copy": "Copy the link",
+      "copied": "Copied"
+    },
+    "accept": {
+      "title": "Accept an invitation",
+      "intro": "Paste the invitation link somebody sent you.",
+      "label": "Invitation link",
+      "placeholder": "didcomm://invite?_oob=…",
+      "submit": "Accept",
+      "accepting": "Saying hello"
     }
   }
 }

@@ -57,9 +57,11 @@ export function disconnectMediator(): Promise<MediatorStatus> {
 export type MessagingErrorCode =
   | "messaging_locked"
   | "messaging_invitation_unreadable"
+  | "messaging_invitation_own"
   | "messaging_insecure"
   | "messaging_mediator_unreachable"
   | "messaging_mediator_refused"
+  | "messaging_counterparty_unreachable"
   | "messaging_not_connected"
   | "messaging_keys"
   | "messaging_unreadable"
@@ -70,9 +72,11 @@ export type MessagingErrorCode =
 const CODES: MessagingErrorCode[] = [
   "messaging_locked",
   "messaging_invitation_unreadable",
+  "messaging_invitation_own",
   "messaging_insecure",
   "messaging_mediator_unreachable",
   "messaging_mediator_refused",
+  "messaging_counterparty_unreachable",
   "messaging_not_connected",
   "messaging_keys",
   "messaging_unreadable",

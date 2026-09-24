@@ -11,7 +11,7 @@ import { useTheme } from "./theme";
 import { destroyVault, errorCode as vaultErrorCode, openVault, useVault } from "./vault";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LogoutScreen } from "./screens/LogoutScreen";
-import { MessagesScreen } from "./screens/MessagesScreen";
+import { MessagesTab } from "./screens/MessagesTab";
 import { PinScreen } from "./screens/PinScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { Onboarding } from "./screens/onboarding/Onboarding";
@@ -191,7 +191,7 @@ export default function App() {
     <div className="app">
       <main className="app__view" key={route}>
         {route === "home" ? <HomeScreen /> : null}
-        {route === "messages" ? <MessagesScreen /> : null}
+        {route === "messages" ? <MessagesTab /> : null}
         {route === "settings" ? (
           <SettingsScreen vault={vault.status} onSignOut={() => setSignOutAsked(true)} />
         ) : null}

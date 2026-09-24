@@ -12,7 +12,8 @@
 //! wallet is open; [`vault`] keeps that seed on the device between launches,
 //! encrypted behind a PIN. The seed never crosses to the front end.
 //!
-//! [`messaging`] is the wallet's mediation with a DIDComm mediator.
+//! [`messaging`] is the wallet's mediation with a DIDComm mediator and the
+//! relationships it has through it.
 
 mod backdrop;
 mod identity;
@@ -25,9 +26,13 @@ mod vault;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // Writing to the clipboard: the webview's own `navigator.clipboard`
+        // is refused on iOS. Only `write-text` is granted — see capabilities.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             identity::manage(app.handle());
             vault::manage(app.handle());
+            messaging::manage(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -45,6 +50,10 @@ pub fn run() {
             messaging::mediator_connect,
             messaging::mediator_check,
             messaging::mediator_disconnect,
+            messaging::contacts_list,
+            messaging::invitation_show,
+            messaging::contact_accept,
+            messaging::messages_sync,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Almena Wallet")

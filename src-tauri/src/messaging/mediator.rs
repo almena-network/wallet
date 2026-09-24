@@ -17,12 +17,15 @@
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
-use almena_didcomm::did::{web, ChainResolver, DidDocument, LocalResolver, StaticResolver};
-use almena_didcomm::{b64, unpack, Message, PackOptions};
+use almena_didcomm::did::{
+    web, ChainResolver, DidDocument, DidResolver, LocalResolver, StaticResolver,
+};
+use almena_didcomm::{b64, unpack, Message, PackOptions, PossessionProof};
+use async_trait::async_trait;
 use serde_json::{json, Value};
 use url::Url;
 
-use super::inbox::Inbox;
+use super::peer::Peer;
 use super::MessagingError;
 
 /// The media type of every envelope this module sends and expects back.
@@ -33,6 +36,15 @@ const INVITATION: &str = "https://didcomm.org/out-of-band/2.0/invitation";
 
 /// The goal a mediator's invitation carries.
 const REQUEST_MEDIATE: &str = "request-mediate";
+
+const MEDIATE_REQUEST: &str = "https://didcomm.org/coordinate-mediation/3.0/mediate-request";
+const RECIPIENT_UPDATE: &str = "https://didcomm.org/coordinate-mediation/3.0/recipient-update";
+const DELIVERY_REQUEST: &str = "https://didcomm.org/messagepickup/3.0/delivery-request";
+const MESSAGES_RECEIVED: &str = "https://didcomm.org/messagepickup/3.0/messages-received";
+
+/// How many messages one `delivery-request` asks for; the mediator caps it at
+/// 100.
+const DELIVERY_LIMIT: u64 = 50;
 
 /// How long a mediator gets to answer before it counts as unreachable.
 const TIMEOUT: Duration = Duration::from_secs(20);
@@ -130,33 +142,12 @@ impl Mediator {
     /// [`MessagingError::MediatorUnreachable`] when the document cannot be read
     /// or names no endpoint this wallet can use.
     pub async fn resolve(did: &str) -> Result<Self, MessagingError> {
-        let url = web::document_url(did).map_err(|_| MessagingError::InvitationUnreadable)?;
-        let url = transport(&url)?;
-
-        let response = client()?
-            .get(url)
-            .send()
-            .await
-            .map_err(|_| MessagingError::MediatorUnreachable)?;
-        if !response.status().is_success() {
-            return Err(MessagingError::MediatorUnreachable);
-        }
-        let json: Value = response
-            .json()
-            .await
-            .map_err(|_| MessagingError::MediatorUnreachable)?;
-        let document =
-            DidDocument::from_json(&json).map_err(|_| MessagingError::MediatorUnreachable)?;
-        // A document served for another DID is not this mediator's, whatever
-        // it says about itself.
-        if document.id != did {
-            return Err(MessagingError::MediatorUnreachable);
-        }
-
+        let document = fetch(did).await?;
         let endpoint = endpoint(&document)?;
         let resolver = ChainResolver::new(vec![
             Arc::new(StaticResolver::new([document])),
             Arc::new(LocalResolver::new()),
+            Arc::new(WebResolver),
         ]);
 
         Ok(Self {
@@ -173,11 +164,8 @@ impl Mediator {
     /// [`MessagingError::MediatorUnreachable`] when it does not answer or the
     /// answer cannot be opened, and [`MessagingError::MediatorRefused`] when the
     /// answer is a problem report.
-    pub async fn request(
-        &self,
-        inbox: &Inbox,
-        message: Message,
-    ) -> Result<Message, MessagingError> {
+    pub async fn request(&self, inbox: &Peer, message: Message) -> Result<Message, MessagingError> {
+        let secrets = inbox.secrets();
         let packed = message
             .from(&inbox.did)
             .to([self.did.as_str()])
@@ -187,7 +175,7 @@ impl Mediator {
                 Some(&inbox.did),
                 None,
                 &self.resolver,
-                &inbox.secrets,
+                &secrets,
                 PackOptions::default(),
             )
             .await
@@ -208,7 +196,7 @@ impl Mediator {
             .await
             .map_err(|_| MessagingError::MediatorUnreachable)?;
 
-        let (reply, metadata) = unpack(&body, &self.resolver, &inbox.secrets)
+        let (reply, metadata) = unpack(&body, &self.resolver, &secrets)
             .await
             .map_err(|_| MessagingError::MediatorUnreachable)?;
         // Only an answer the mediator itself authcrypted is an answer.
@@ -220,6 +208,196 @@ impl Mediator {
         }
 
         Ok(reply)
+    }
+
+    /// Asks for mediation for the inbox and registers the inbox with it.
+    ///
+    /// **Harmless to repeat, and repeated on purpose.** The mediator grants the
+    /// same mediation to the same inbox and answers `no_change` to a DID it
+    /// already has; a mediator that forgot the wallet — its mediation expired,
+    /// or it was reset — has it back before anything else is asked of it.
+    pub async fn ensure(
+        &self,
+        inbox: &Peer,
+        invitation: Option<String>,
+    ) -> Result<(), MessagingError> {
+        let mut request = Message::new(MEDIATE_REQUEST, json!({}));
+        request.pthid = invitation;
+        let grant = self.request(inbox, request).await?;
+        let routes_here = grant.type_.ends_with("/mediate-grant")
+            && grant.body["routing_did"]
+                .as_array()
+                .is_some_and(|dids| dids.iter().any(|did| did == self.did.as_str()));
+        // Every DID's service names this mediator as its route; a grant that
+        // routes through something else would leave them all pointing at the
+        // wrong place.
+        if !routes_here {
+            return Err(MessagingError::MediatorRefused);
+        }
+        self.register(inbox, inbox).await
+    }
+
+    /// Resolves DIDs: this mediator's from what was fetched, `did:key` and
+    /// `did:peer` locally, and any other `did:web` — another mediator — over
+    /// the network.
+    pub fn resolver(&self) -> &ChainResolver {
+        &self.resolver
+    }
+
+    /// Adds or removes `peer` as a recipient of the inbox's mediation, and
+    /// returns the mediator's result for it (`success`, `no_change`,
+    /// `client_error`, …).
+    ///
+    /// A DID other than the inbox itself carries a possession proof: a JWT it
+    /// signs, naming this mediator and the inbox — the Almena extension the
+    /// mediator requires before it routes a DID to somebody (its
+    /// `docs/didcomm.md`, "Recipient proof").
+    pub async fn recipient(
+        &self,
+        inbox: &Peer,
+        peer: &Peer,
+        action: &str,
+    ) -> Result<String, MessagingError> {
+        let mut update = json!({"recipient_did": peer.did, "action": action});
+        if action == "add" && peer.did != inbox.did {
+            let proof = PossessionProof::new(&peer.did, &self.did, &inbox.did)
+                .pack(None, &self.resolver, &peer.secrets())
+                .await
+                .map_err(|_| MessagingError::Keys)?;
+            update["proof"] = json!(proof);
+        }
+
+        let reply = self
+            .request(
+                inbox,
+                Message::new(RECIPIENT_UPDATE, json!({"updates": [update]})),
+            )
+            .await?;
+        let result = reply.body["updated"]
+            .as_array()
+            .and_then(|updated| {
+                updated
+                    .iter()
+                    .find(|entry| entry["recipient_did"] == peer.did.as_str())
+            })
+            .and_then(|entry| entry["result"].as_str())
+            .ok_or(MessagingError::MediatorUnreachable)?;
+
+        Ok(result.to_owned())
+    }
+
+    /// Registers `peer` so that messages for it are queued for the inbox.
+    pub async fn register(&self, inbox: &Peer, peer: &Peer) -> Result<(), MessagingError> {
+        match self.recipient(inbox, peer, "add").await?.as_str() {
+            "success" | "no_change" => Ok(()),
+            _ => Err(MessagingError::MediatorRefused),
+        }
+    }
+
+    /// The oldest messages waiting for the inbox's mediation, as `(queue id,
+    /// envelope)` pairs. They stay queued until [`Self::acknowledge`].
+    pub async fn deliveries(&self, inbox: &Peer) -> Result<Vec<(String, String)>, MessagingError> {
+        let reply = self
+            .request(
+                inbox,
+                Message::new(DELIVERY_REQUEST, json!({"limit": DELIVERY_LIMIT})),
+            )
+            .await?;
+        // An empty queue is answered with a `status`, not an empty delivery.
+        if !reply.type_.ends_with("/delivery") {
+            return Ok(Vec::new());
+        }
+
+        Ok(reply
+            .attachments
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|attachment| {
+                let id = attachment.id?;
+                let bytes = b64::decode(attachment.data.base64.as_deref()?).ok()?;
+                Some((id, String::from_utf8(bytes).ok()?))
+            })
+            .collect())
+    }
+
+    /// Tells the mediator these messages arrived, which is what removes them
+    /// from the queue.
+    pub async fn acknowledge(&self, inbox: &Peer, ids: &[String]) -> Result<(), MessagingError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        self.request(
+            inbox,
+            Message::new(MESSAGES_RECEIVED, json!({"message_id_list": ids})),
+        )
+        .await
+        .map(|_| ())
+    }
+}
+
+/// Posts a packed message to the transport URI its recipient's service names —
+/// which, for anybody reached through a mediator, is that mediator.
+///
+/// # Errors
+///
+/// [`MessagingError::Insecure`] for plain HTTP off this machine, and
+/// [`MessagingError::CounterpartyUnreachable`] when nobody takes it.
+pub async fn post(uri: &str, message: String) -> Result<(), MessagingError> {
+    let uri = transport(uri)?;
+    let response = client()?
+        .post(uri)
+        .header(reqwest::header::CONTENT_TYPE, ENCRYPTED)
+        .body(message)
+        .send()
+        .await
+        .map_err(|_| MessagingError::CounterpartyUnreachable)?;
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        Err(MessagingError::CounterpartyUnreachable)
+    }
+}
+
+/// Fetches a `did:web` document and checks it is the one asked for.
+async fn fetch(did: &str) -> Result<DidDocument, MessagingError> {
+    let url = web::document_url(did).map_err(|_| MessagingError::InvitationUnreadable)?;
+    let url = transport(&url)?;
+
+    let response = client()?
+        .get(url)
+        .send()
+        .await
+        .map_err(|_| MessagingError::MediatorUnreachable)?;
+    if !response.status().is_success() {
+        return Err(MessagingError::MediatorUnreachable);
+    }
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|_| MessagingError::MediatorUnreachable)?;
+    let document =
+        DidDocument::from_json(&json).map_err(|_| MessagingError::MediatorUnreachable)?;
+    // A document served for another DID is not that DID's, whatever it says
+    // about itself.
+    if document.id != did {
+        return Err(MessagingError::MediatorUnreachable);
+    }
+    Ok(document)
+}
+
+/// Resolves `did:web` over HTTPS (and loopback HTTP in a debug build): how a
+/// counterparty's mediator is found when it is not this wallet's own.
+struct WebResolver;
+
+#[async_trait]
+impl DidResolver for WebResolver {
+    async fn resolve(&self, did: &str) -> almena_didcomm::Result<DidDocument> {
+        if !did.starts_with("did:web:") {
+            return Err(almena_didcomm::Error::DidNotFound(did.to_owned()));
+        }
+        fetch(did)
+            .await
+            .map_err(|_| almena_didcomm::Error::DidNotFound(did.to_owned()))
     }
 }
 
@@ -290,12 +468,16 @@ fn client() -> Result<&'static reqwest::Client, MessagingError> {
             .with_root_certificates(roots)
             .with_no_client_auth();
 
-            reqwest::Client::builder()
+            let builder = reqwest::Client::builder()
                 .tls_backend_preconfigured(tls)
                 .redirect(reqwest::redirect::Policy::none())
-                .timeout(TIMEOUT)
-                .build()
-                .ok()
+                .timeout(TIMEOUT);
+            // Each `#[tokio::test]` has a runtime of its own, and a pooled
+            // connection dies with the runtime that opened it; the application
+            // has one runtime for its whole life and keeps the pool.
+            #[cfg(test)]
+            let builder = builder.pool_max_idle_per_host(0);
+            builder.build().ok()
         })
         .as_ref()
         .ok_or(MessagingError::MediatorUnreachable)

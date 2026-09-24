@@ -1,5 +1,5 @@
-//! What the wallet writes down about its messaging: for now, which mediator it
-//! is connected to.
+//! What the wallet writes down about its messaging: which mediator it is
+//! connected to, and who it has a relationship with.
 //!
 //! **Sealed under a key the seed derives** — `m/2'`, see
 //! [`crate::identity::keys::STATE`] — so it is readable exactly while the
@@ -42,11 +42,34 @@ pub struct Mediation {
     pub inbox: String,
 }
 
+/// One relationship: one counterparty, and the pairwise DID this wallet is to
+/// it. No secret is kept: the pairwise keys are derived again from the seed and
+/// `origin` whenever they are needed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Relationship {
+    /// The pairwise DID this wallet speaks as in it.
+    pub ours: String,
+    /// The DID the counterparty speaks as. Until it answers, that is the
+    /// contact card its invitation named.
+    pub theirs: String,
+    /// The DID the pairwise was derived from: the counterparty as this wallet
+    /// first knew it. It does not change when the counterparty rotates.
+    pub origin: String,
+    /// Waiting for the counterparty's first answer.
+    pub pending: bool,
+    /// When it was opened, in seconds since the epoch.
+    pub since: u64,
+}
+
 /// Everything in the file.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct State {
     pub mediation: Option<Mediation>,
+    /// Added after the first version of the file, which is read as none.
+    #[serde(default)]
+    pub relationships: Vec<Relationship>,
 }
 
 /// The file on disk: its version and the sealed state.
@@ -179,6 +202,13 @@ mod tests {
                 mediator: "did:web:mediator.example.com".into(),
                 inbox: "did:peer:2.Vz6Mk".into(),
             }),
+            relationships: vec![Relationship {
+                ours: "did:peer:2.ours".into(),
+                theirs: "did:peer:2.theirs".into(),
+                origin: "did:peer:2.card".into(),
+                pending: true,
+                since: 1,
+            }],
         }
     }
 
@@ -203,6 +233,31 @@ mod tests {
         let sealed = seal(&state(), &[3u8; 64]).expect("sealed");
         let text = String::from_utf8(sealed).expect("json");
         assert!(!text.contains("mediator.example.com"));
+    }
+
+    #[test]
+    fn a_state_written_before_relationships_existed_still_opens() {
+        let seed = [3u8; 64];
+        let older = serde_json::json!({"mediation": null});
+        let key = keys::derive(&seed, &[STATE]);
+        let nonce = [0u8; NONCE_BYTES];
+        let ciphertext = XChaCha20Poly1305::new(Key::from_slice(&*key))
+            .encrypt(
+                XNonce::from_slice(&nonce),
+                Payload {
+                    msg: older.to_string().as_bytes(),
+                    aad: AAD,
+                },
+            )
+            .expect("sealed");
+        let bytes = serde_json::to_vec(&Sealed {
+            version: VERSION,
+            nonce: B64.encode(nonce),
+            ciphertext: B64.encode(ciphertext),
+        })
+        .expect("json");
+
+        assert_eq!(open(&bytes, &seed).expect("opened"), State::default());
     }
 
     #[test]

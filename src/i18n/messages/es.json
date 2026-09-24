@@ -11,15 +11,11 @@
     "back": "Volver"
   },
   "home": {
-    "greeting": "Tu cartera",
-    "credentials": {
-      "title": "Credenciales",
-      "empty": "Todavía no hay credenciales",
-      "emptyHint": "Las credenciales que te emitan aparecerán aquí."
-    }
+    "greeting": "Tu cartera"
   },
   "messages": {
     "title": "Mensajes",
+    "newConversation": "Nueva conversación",
     "empty": "Todavía no hay mensajes",
     "emptyHint": "Las conversaciones que abras aparecerán aquí."
   },
@@ -181,7 +177,47 @@
       "messaging_unreadable": "No se ha podido leer lo que este dispositivo guarda sobre el mediador.",
       "messaging_storage": "No se ha podido guardar el mediador en este dispositivo.",
       "messaging_entropy": "Este dispositivo no ha dado la aleatoriedad que necesita el cifrado. No se ha escrito nada.",
-      "messaging_unknown": "Eso no ha funcionado. Inténtalo otra vez."
+      "messaging_unknown": "Eso no ha funcionado. Inténtalo otra vez.",
+      "messaging_invitation_own": "Esa es tu propia invitación. Mándasela a otra persona.",
+      "messaging_counterparty_unreachable": "No se ha podido contactar con la otra persona. Inténtalo más tarde."
+    }
+  },
+  "conversations": {
+    "new": {
+      "title": "Nueva conversación",
+      "contacts": "Contactos",
+      "empty": "Todavía no tienes contactos. Invita a alguien o acepta su invitación.",
+      "pending": "Esperando a que responda",
+      "since": "Desde el {date}",
+      "directory": {
+        "title": "Buscar en el directorio",
+        "label": "Nombre o alias",
+        "placeholder": "¿A quién buscas?",
+        "search": "Buscar",
+        "unavailable": "El directorio todavía no está disponible. De momento, comparte una invitación."
+      },
+      "invite": {
+        "title": "Invitar a alguien",
+        "hint": "Enseña tu código a quien tengas delante o mándale el enlace. Si te ha mandado el suyo, acéptalo.",
+        "show": "Mostrar mi invitación",
+        "accept": "Tengo una invitación"
+      }
+    },
+    "invite": {
+      "title": "Tu invitación",
+      "intro": "Quien escanee este código o abra este enlace podrá empezar una conversación contigo. Cada persona recibe una dirección propia, así que nadie puede saber con quién más hablas.",
+      "codeLabel": "Tu invitación como código QR",
+      "preparing": "Preparando tu invitación",
+      "copy": "Copiar el enlace",
+      "copied": "Copiado"
+    },
+    "accept": {
+      "title": "Aceptar una invitación",
+      "intro": "Pega el enlace de invitación que te han mandado.",
+      "label": "Enlace de invitación",
+      "placeholder": "didcomm://invite?_oob=…",
+      "submit": "Aceptar",
+      "accepting": "Saludando"
     }
   }
 }

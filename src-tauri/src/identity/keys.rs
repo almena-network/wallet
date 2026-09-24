@@ -31,6 +31,16 @@ pub(crate) const INBOX: u32 = 1;
 /// with something that encrypts.
 pub(crate) const STATE: u32 = 2;
 
+/// The root of every pairwise DID: `m/3'/a'/b'/c'/…`, where `a`, `b` and `c`
+/// come from a hash of the counterparty's DID — so the same words and the same
+/// counterparty always meet at the same keys, with nothing to remember.
+pub(crate) const PAIRWISE: u32 = 3;
+
+/// The contact card: `m/4'/…`, the DID the wallet's own invitation names, the
+/// one somebody writes to first. Long-lived, so the invitation can be printed
+/// or published.
+pub(crate) const CARD: u32 = 4;
+
 /// What marks 32 bytes as an ed25519 public key: the multicodec `ed25519-pub`,
 /// `0xed`, as an unsigned varint — the same two bytes `did:key` uses.
 const ED25519_PUB: [u8; 2] = [0xed, 0x01];
@@ -45,7 +55,7 @@ pub fn signing_key(seed: &[u8; 64]) -> SigningKey {
 }
 
 /// The 32 bytes at a hardened path below the seed, for the keys other than the
-/// identity's own — see [`INBOX`] and [`STATE`].
+/// identity's own — see [`INBOX`], [`STATE`], [`PAIRWISE`] and [`CARD`].
 pub(crate) fn derive(seed: &[u8; 64], path: &[u32]) -> Zeroizing<[u8; 32]> {
     Zeroizing::new(walk(seed, path))
 }
