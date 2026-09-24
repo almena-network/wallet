@@ -1,5 +1,5 @@
 //! What the wallet writes down about its messaging: which mediator it is
-//! connected to, and who it has a relationship with.
+//! connected to, the name it goes by, and who it has a relationship with.
 //!
 //! **Sealed under a key the seed derives** — `m/2'`, see
 //! [`crate::identity::keys::STATE`] — so it is readable exactly while the
@@ -9,16 +9,18 @@
 //!
 //! It lives in the application's private directory, is written beside itself
 //! and moved into place, and goes when the identity goes: signing out and
-//! running out of PIN attempts both call [`clear`].
+//! running out of PIN attempts both call [`clear`]. The conversations are
+//! sealed the same way, one file each — see [`super::conversation`].
 
 use std::fs;
 use std::io::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use base64::Engine as _;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, Runtime};
 
@@ -60,6 +62,45 @@ pub struct Relationship {
     pub pending: bool,
     /// When it was opened, in seconds since the epoch.
     pub since: u64,
+    /// The name the counterparty goes by, from its profile.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// The name this wallet gave it, which wins over theirs.
+    #[serde(default)]
+    pub alias: Option<String>,
+    /// Messages that arrived since the conversation was last opened.
+    #[serde(default)]
+    pub unread: u32,
+    /// The latest message either way, so the inbox is drawn without opening
+    /// every conversation.
+    #[serde(default)]
+    pub last: Option<Last>,
+}
+
+impl Relationship {
+    /// A relationship opened just now, with nothing said in it yet.
+    pub fn new(ours: String, theirs: String, pending: bool) -> Self {
+        Self {
+            ours,
+            origin: theirs.clone(),
+            theirs,
+            pending,
+            since: almena_didcomm::message::now(),
+            name: None,
+            alias: None,
+            unread: 0,
+            last: None,
+        }
+    }
+}
+
+/// The latest message of a conversation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Last {
+    pub content: String,
+    pub at: u64,
+    pub mine: bool,
 }
 
 /// Everything in the file.
@@ -67,6 +108,9 @@ pub struct Relationship {
 #[serde(rename_all = "camelCase")]
 pub struct State {
     pub mediation: Option<Mediation>,
+    /// The name this wallet goes by, sent to every contact.
+    #[serde(default)]
+    pub profile: Option<String>,
     /// Added after the first version of the file, which is read as none.
     #[serde(default)]
     pub relationships: Vec<Relationship>,
@@ -90,12 +134,7 @@ pub fn read<R: Runtime>(
     app: &tauri::AppHandle<R>,
     seed: &[u8; 64],
 ) -> Result<State, MessagingError> {
-    let bytes = match fs::read(file(app)?) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(State::default()),
-        Err(_) => return Err(MessagingError::Storage),
-    };
-    open(&bytes, seed)
+    Ok(load(&file(app)?, seed, AAD)?.unwrap_or_default())
 }
 
 /// Writes the state, replacing what was there.
@@ -109,8 +148,30 @@ pub fn write<R: Runtime>(
     seed: &[u8; 64],
     state: &State,
 ) -> Result<(), MessagingError> {
-    let bytes = seal(state, seed)?;
-    let path = file(app)?;
+    store(&file(app)?, seed, AAD, state)
+}
+
+/// Opens the sealed file at `path`, or `None` when there is none.
+pub fn load<T: DeserializeOwned>(
+    path: &Path,
+    seed: &[u8; 64],
+    aad: &[u8],
+) -> Result<Option<T>, MessagingError> {
+    match fs::read(path) {
+        Ok(bytes) => open(&bytes, seed, aad).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(_) => Err(MessagingError::Storage),
+    }
+}
+
+/// Seals `value` into `path`: written beside it and moved into place.
+pub fn store<T: Serialize>(
+    path: &Path,
+    seed: &[u8; 64],
+    aad: &[u8],
+    value: &T,
+) -> Result<(), MessagingError> {
+    let bytes = seal(value, seed, aad)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|_| MessagingError::Storage)?;
     }
@@ -122,7 +183,7 @@ pub fn write<R: Runtime>(
         .map_err(|_| MessagingError::Storage)?;
     handle.sync_all().map_err(|_| MessagingError::Storage)?;
     drop(handle);
-    fs::rename(&temporary, &path).map_err(|_| MessagingError::Storage)
+    fs::rename(&temporary, path).map_err(|_| MessagingError::Storage)
 }
 
 /// Removes the file. Called when the identity leaves the device.
@@ -133,8 +194,8 @@ pub fn clear<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
-fn seal(state: &State, seed: &[u8; 64]) -> Result<Vec<u8>, MessagingError> {
-    let plaintext = serde_json::to_vec(state).map_err(|_| MessagingError::Storage)?;
+fn seal<T: Serialize>(value: &T, seed: &[u8; 64], aad: &[u8]) -> Result<Vec<u8>, MessagingError> {
+    let plaintext = serde_json::to_vec(value).map_err(|_| MessagingError::Storage)?;
     let mut nonce = [0u8; NONCE_BYTES];
     getrandom::getrandom(&mut nonce).map_err(|_| MessagingError::Entropy)?;
 
@@ -144,7 +205,7 @@ fn seal(state: &State, seed: &[u8; 64]) -> Result<Vec<u8>, MessagingError> {
             XNonce::from_slice(&nonce),
             Payload {
                 msg: &plaintext,
-                aad: AAD,
+                aad,
             },
         )
         .map_err(|_| MessagingError::Storage)?;
@@ -157,7 +218,11 @@ fn seal(state: &State, seed: &[u8; 64]) -> Result<Vec<u8>, MessagingError> {
     .map_err(|_| MessagingError::Storage)
 }
 
-fn open(bytes: &[u8], seed: &[u8; 64]) -> Result<State, MessagingError> {
+fn open<T: DeserializeOwned>(
+    bytes: &[u8],
+    seed: &[u8; 64],
+    aad: &[u8],
+) -> Result<T, MessagingError> {
     let sealed: Sealed = serde_json::from_slice(bytes).map_err(|_| MessagingError::Unreadable)?;
     if sealed.version != VERSION {
         return Err(MessagingError::Unreadable);
@@ -177,7 +242,7 @@ fn open(bytes: &[u8], seed: &[u8; 64]) -> Result<State, MessagingError> {
             XNonce::from_slice(&nonce),
             Payload {
                 msg: &ciphertext,
-                aad: AAD,
+                aad,
             },
         )
         .map_err(|_| MessagingError::Unreadable)?;
@@ -186,9 +251,13 @@ fn open(bytes: &[u8], seed: &[u8; 64]) -> Result<State, MessagingError> {
 }
 
 fn file<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, MessagingError> {
+    directory(app).map(|dir| dir.join(FILE))
+}
+
+/// The application's private directory, where everything here is written.
+pub fn directory<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, MessagingError> {
     app.path()
         .app_local_data_dir()
-        .map(|dir| dir.join(FILE))
         .map_err(|_| MessagingError::Storage)
 }
 
@@ -208,29 +277,38 @@ mod tests {
                 origin: "did:peer:2.card".into(),
                 pending: true,
                 since: 1,
+                name: Some("Alice".into()),
+                alias: None,
+                unread: 2,
+                last: Some(Last {
+                    content: "hello".into(),
+                    at: 1,
+                    mine: false,
+                }),
             }],
+            profile: Some("Bob".into()),
         }
     }
 
     #[test]
     fn what_is_sealed_opens_under_the_same_seed() {
         let seed = [3u8; 64];
-        let sealed = seal(&state(), &seed).expect("sealed");
-        assert_eq!(open(&sealed, &seed).expect("opened"), state());
+        let sealed = seal(&state(), &seed, AAD).expect("sealed");
+        assert_eq!(open::<State>(&sealed, &seed, AAD).expect("opened"), state());
     }
 
     #[test]
     fn another_seed_opens_nothing() {
-        let sealed = seal(&state(), &[3u8; 64]).expect("sealed");
+        let sealed = seal(&state(), &[3u8; 64], AAD).expect("sealed");
         assert!(matches!(
-            open(&sealed, &[4u8; 64]),
+            open::<State>(&sealed, &[4u8; 64], AAD),
             Err(MessagingError::Unreadable)
         ));
     }
 
     #[test]
     fn the_file_says_nothing_about_what_it_holds() {
-        let sealed = seal(&state(), &[3u8; 64]).expect("sealed");
+        let sealed = seal(&state(), &[3u8; 64], AAD).expect("sealed");
         let text = String::from_utf8(sealed).expect("json");
         assert!(!text.contains("mediator.example.com"));
     }
@@ -257,17 +335,20 @@ mod tests {
         })
         .expect("json");
 
-        assert_eq!(open(&bytes, &seed).expect("opened"), State::default());
+        assert_eq!(
+            open::<State>(&bytes, &seed, AAD).expect("opened"),
+            State::default()
+        );
     }
 
     #[test]
     fn a_file_of_another_version_is_refused() {
-        let sealed = seal(&state(), &[3u8; 64]).expect("sealed");
+        let sealed = seal(&state(), &[3u8; 64], AAD).expect("sealed");
         let mut value: serde_json::Value = serde_json::from_slice(&sealed).expect("json");
         value["version"] = serde_json::json!(VERSION + 1);
         let bytes = serde_json::to_vec(&value).expect("json");
         assert!(matches!(
-            open(&bytes, &[3u8; 64]),
+            open::<State>(&bytes, &[3u8; 64], AAD),
             Err(MessagingError::Unreadable)
         ));
     }

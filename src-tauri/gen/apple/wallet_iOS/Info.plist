@@ -55,5 +55,18 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Almena Wallet uses the camera to read QR codes.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>almena</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>almena</string>
+		</dict>
+	</array>
 </dict>
 </plist>

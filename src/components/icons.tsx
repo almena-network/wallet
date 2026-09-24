@@ -50,6 +50,25 @@ export function SettingsIcon({ className }: IconProps) {
   );
 }
 
+/** A person: the profile, which is the identity this wallet holds. */
+export function ProfileIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="12" cy="8.5" r="3.6" />
+      <path d="M5 19.5c.9-3.3 3.7-5.2 7-5.2s6.1 1.9 7 5.2" />
+    </svg>
+  );
+}
+
+export function CameraIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M4 8.5a1.5 1.5 0 0 1 1.5-1.5h2.2l1.5-2h5.6l1.5 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />
+      <circle cx="12" cy="12.8" r="3.3" />
+    </svg>
+  );
+}
+
 export function ChevronLeftIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className}>

@@ -1232,6 +1232,112 @@ body {
   max-width: 36ch;
 }
 
+/* --------------------------------------------------------------- profile */
+
+/* The top of the profile: the picture, and the name under it, centred —
+   the one place in the wallet that is about the person holding it. */
+.profile-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 6px;
+  text-align: center;
+}
+
+/* The identity's round mark. Where the picture can be changed it sits in a
+   button, and the camera in its corner says so. */
+.avatar-button {
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.16s var(--ease-spring);
+}
+
+.avatar-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.avatar-button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.avatar {
+  position: relative;
+  display: inline-flex;
+  width: 104px;
+  height: 104px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.avatar__image {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.avatar__initial {
+  font-size: 40px;
+  font-weight: 700;
+}
+
+.avatar__badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--surface-strong);
+  border-radius: 50%;
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+.avatar__badge svg {
+  width: 17px;
+  height: 17px;
+}
+
+.profile-header__name {
+  margin: 4px 0 0;
+  font-size: clamp(22px, 5.6vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.profile-header__name--none {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.profile-header__action {
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* ------------------------------------------------------------------ menu */
 
 /* Settings is a list of places rather than a page of switches: each row leads
@@ -2027,6 +2133,162 @@ html[data-camera-preview="true"] .app::before {
 /* What this wallet sent, told apart by a stripe in the brand's colour. */
 .message--sent {
   border-left: 3px solid var(--brand);
+}
+
+/* A column of rows with nothing around them: the inbox is the screen. */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A person's mark: the first letter of what they are called, in a circle, so
+   a contact reads as somebody and not as a setting. */
+.row__icon--initial {
+  border-radius: 50%;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* The preview is one line: the conversation is where the rest is read. */
+.message-row__preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-row__meta {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.message-row__time {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.message-row__count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--brand);
+  color: var(--brand-ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.detail-list__mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ---------------------------------------------------------- conversation */
+
+/* Who the conversation is with, as the header's title and the way to them. */
+.conversation__who {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conversation__name {
+  overflow: hidden;
+  font-size: clamp(17px, 4.6vw, 20px);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bubbles__empty {
+  margin: 24px 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Theirs on the left on the card's surface; this wallet's on the right in the
+   accent — the one colour that means "yours" everywhere else too. */
+.bubble {
+  display: flex;
+  max-width: min(80%, 460px);
+  flex-direction: column;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 16px 4px;
+  background: var(--surface);
+}
+
+.bubble--mine {
+  align-self: flex-end;
+  border-color: transparent;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+/* Not delivered is a warning, and warnings wear the warning colour. */
+.bubble--failed {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: inherit;
+}
+
+.bubble__text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.bubble__time {
+  align-self: flex-end;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.bubble__retry {
+  align-self: flex-end;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.composer__input {
+  flex: 1;
+  max-height: 140px;
+  resize: none;
+  field-sizing: content;
 }
 
 /* The summary of a request: what each answer was asked as, and what it is. */

@@ -1,0 +1,4 @@
+/* The notification the mediator sends when something is waiting. It sends
+   these keys, never the words; the keys are the mediator's contract. */
+"almena_wake_title" = "New messages";
+"almena_wake_body" = "Open the wallet to read them.";

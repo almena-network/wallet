@@ -129,6 +129,9 @@ pub struct Mediator {
     pub did: String,
     /// The HTTP(S) URI of its `DIDCommMessaging` service.
     endpoint: String,
+    /// The WebSocket URI of its `DIDCommMessaging` service, for live delivery,
+    /// when it has one this wallet may use.
+    pub socket: Option<String>,
     resolver: ChainResolver,
 }
 
@@ -144,6 +147,7 @@ impl Mediator {
     pub async fn resolve(did: &str) -> Result<Self, MessagingError> {
         let document = fetch(did).await?;
         let endpoint = endpoint(&document)?;
+        let socket = socket(&document);
         let resolver = ChainResolver::new(vec![
             Arc::new(StaticResolver::new([document])),
             Arc::new(LocalResolver::new()),
@@ -153,6 +157,7 @@ impl Mediator {
         Ok(Self {
             did: did.to_owned(),
             endpoint,
+            socket,
             resolver,
         })
     }
@@ -165,26 +170,11 @@ impl Mediator {
     /// answer cannot be opened, and [`MessagingError::MediatorRefused`] when the
     /// answer is a problem report.
     pub async fn request(&self, inbox: &Peer, message: Message) -> Result<Message, MessagingError> {
-        let secrets = inbox.secrets();
-        let packed = message
-            .from(&inbox.did)
-            .to([self.did.as_str()])
-            .header("return_route", json!("all"))
-            .pack_encrypted(
-                &self.did,
-                Some(&inbox.did),
-                None,
-                &self.resolver,
-                &secrets,
-                PackOptions::default(),
-            )
-            .await
-            .map_err(|_| MessagingError::Keys)?;
-
+        let packed = self.pack(inbox, message).await?;
         let response = client()?
             .post(&self.endpoint)
             .header(reqwest::header::CONTENT_TYPE, ENCRYPTED)
-            .body(packed.message)
+            .body(packed)
             .send()
             .await
             .map_err(|_| MessagingError::MediatorUnreachable)?;
@@ -196,7 +186,38 @@ impl Mediator {
             .await
             .map_err(|_| MessagingError::MediatorUnreachable)?;
 
-        let (reply, metadata) = unpack(&body, &self.resolver, &secrets)
+        self.open(inbox, &body).await
+    }
+
+    /// Packs a message from the inbox to the mediator: authcrypted, with its
+    /// answer asked for on the same connection.
+    pub async fn pack(&self, inbox: &Peer, message: Message) -> Result<String, MessagingError> {
+        message
+            .from(&inbox.did)
+            .to([self.did.as_str()])
+            .header("return_route", json!("all"))
+            .pack_encrypted(
+                &self.did,
+                Some(&inbox.did),
+                None,
+                &self.resolver,
+                &inbox.secrets(),
+                PackOptions::default(),
+            )
+            .await
+            .map(|packed| packed.message)
+            .map_err(|_| MessagingError::Keys)
+    }
+
+    /// Opens what the mediator sent the inbox.
+    ///
+    /// # Errors
+    ///
+    /// [`MessagingError::MediatorUnreachable`] when it does not open or the
+    /// mediator did not authcrypt it, and [`MessagingError::MediatorRefused`]
+    /// when it is a problem report.
+    pub async fn open(&self, inbox: &Peer, envelope: &str) -> Result<Message, MessagingError> {
+        let (reply, metadata) = unpack(envelope, &self.resolver, &inbox.secrets())
             .await
             .map_err(|_| MessagingError::MediatorUnreachable)?;
         // Only an answer the mediator itself authcrypted is an answer.
@@ -206,7 +227,6 @@ impl Mediator {
         if reply.type_.ends_with("/problem-report") {
             return Err(MessagingError::MediatorRefused);
         }
-
         Ok(reply)
     }
 
@@ -303,21 +323,7 @@ impl Mediator {
                 Message::new(DELIVERY_REQUEST, json!({"limit": DELIVERY_LIMIT})),
             )
             .await?;
-        // An empty queue is answered with a `status`, not an empty delivery.
-        if !reply.type_.ends_with("/delivery") {
-            return Ok(Vec::new());
-        }
-
-        Ok(reply
-            .attachments
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|attachment| {
-                let id = attachment.id?;
-                let bytes = b64::decode(attachment.data.base64.as_deref()?).ok()?;
-                Some((id, String::from_utf8(bytes).ok()?))
-            })
-            .collect())
+        Ok(delivered(reply))
     }
 
     /// Tells the mediator these messages arrived, which is what removes them
@@ -333,6 +339,24 @@ impl Mediator {
         .await
         .map(|_| ())
     }
+}
+
+/// What a `delivery` carries, as `(queue id, envelope)` pairs; nothing for any
+/// other message — an empty queue is answered with a `status`.
+pub fn delivered(reply: Message) -> Vec<(String, String)> {
+    if !reply.type_.ends_with("/delivery") {
+        return Vec::new();
+    }
+    reply
+        .attachments
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|attachment| {
+            let id = attachment.id?;
+            let bytes = b64::decode(attachment.data.base64.as_deref()?).ok()?;
+            Some((id, String::from_utf8(bytes).ok()?))
+        })
+        .collect()
 }
 
 /// Posts a packed message to the transport URI its recipient's service names —
@@ -402,7 +426,6 @@ impl DidResolver for WebResolver {
 }
 
 /// The first HTTP(S) endpoint of the document's `DIDCommMessaging` service.
-/// The WebSocket one is for live delivery, which is not built yet.
 fn endpoint(document: &DidDocument) -> Result<String, MessagingError> {
     let mut insecure = false;
     for service in document.didcomm_services() {
@@ -422,6 +445,22 @@ fn endpoint(document: &DidDocument) -> Result<String, MessagingError> {
     } else {
         MessagingError::MediatorUnreachable
     })
+}
+
+/// The first WebSocket endpoint of the document's `DIDCommMessaging` service
+/// that this build may use: `wss`, or `ws` on this machine in a debug build.
+fn socket(document: &DidDocument) -> Option<String> {
+    document
+        .didcomm_services()
+        .flat_map(|service| service.didcomm_endpoints().unwrap_or_default())
+        .find_map(|endpoint| {
+            let url = Url::parse(&endpoint.uri).ok()?;
+            match url.scheme() {
+                "wss" => Some(endpoint.uri),
+                "ws" if cfg!(debug_assertions) && is_loopback(&url) => Some(endpoint.uri),
+                _ => None,
+            }
+        })
 }
 
 /// The URL to actually use: HTTPS as it is, and plain HTTP only for this
@@ -457,19 +496,8 @@ fn client() -> Result<&'static reqwest::Client, MessagingError> {
 
     CLIENT
         .get_or_init(|| {
-            let roots = rustls::RootCertStore {
-                roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-            };
-            let tls = rustls::ClientConfig::builder_with_provider(Arc::new(
-                rustls::crypto::ring::default_provider(),
-            ))
-            .with_safe_default_protocol_versions()
-            .ok()?
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-
             let builder = reqwest::Client::builder()
-                .tls_backend_preconfigured(tls)
+                .tls_backend_preconfigured(Arc::unwrap_or_clone(tls().ok()?))
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(TIMEOUT);
             // Each `#[tokio::test]` has a runtime of its own, and a pooled
@@ -481,6 +509,28 @@ fn client() -> Result<&'static reqwest::Client, MessagingError> {
         })
         .as_ref()
         .ok_or(MessagingError::MediatorUnreachable)
+}
+
+/// The TLS every connection to a mediator is made with: Rustls with `ring` and
+/// the Mozilla roots, the same for HTTPS and for the WebSocket.
+pub fn tls() -> Result<Arc<rustls::ClientConfig>, MessagingError> {
+    static TLS: OnceLock<Option<Arc<rustls::ClientConfig>>> = OnceLock::new();
+
+    TLS.get_or_init(|| {
+        let roots = rustls::RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+        };
+        let config = rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .ok()?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+        Some(Arc::new(config))
+    })
+    .clone()
+    .ok_or(MessagingError::MediatorUnreachable)
 }
 
 #[cfg(test)]

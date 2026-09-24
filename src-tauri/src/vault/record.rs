@@ -1,9 +1,11 @@
 //! The record: what the wallet writes down, and what it takes to read it back.
 //!
 //! **One secret, wrapped twice.** A random data key encrypts the seed; the data
-//! key itself is encrypted by a key the PIN derives. The indirection is what
-//! will let a second wrap — a copy of the data key the device holds behind a
-//! face or a finger — open the same record later without re-sealing the seed.
+//! key itself is encrypted by a key the PIN derives. Where the platform has a
+//! secret store, a copy of the data key goes there too, so a face opens the
+//! wallet without the digits — see [`super::store`]. Either wrap opens it and
+//! neither is the wallet, which is what lets a failed sensor not be the end of
+//! an identity and a forgotten PIN not be either.
 //!
 //! **The format carries its version and its own parameters.** A wallet installed
 //! over an older one has to read what that one wrote, so nothing here is implied
@@ -125,8 +127,6 @@ pub struct Record {
     /// How long the PIN is, so the keypad can be drawn before it is typed.
     pub digits: u8,
     /// Whether a copy of the data key was placed in the platform's secret store.
-    /// Always false until opening with the device exists; kept so the format
-    /// does not change when it does.
     pub device_wrap: bool,
     /// Wrong PINs since the last right one.
     pub wrong: u8,
@@ -206,6 +206,43 @@ impl Record {
             .map_err(|_| VaultError::Unreadable)?;
 
         Ok(Zeroizing::new(bytes))
+    }
+
+    /// The same seed and the same data key, wrapped by a different PIN.
+    ///
+    /// The seed is left exactly as it was: changing a PIN rewraps the key that
+    /// opens the record and touches nothing that was sealed under it.
+    ///
+    /// # Errors
+    ///
+    /// [`VaultError::Entropy`] when the system will not supply a fresh salt.
+    pub fn rewrap(
+        &self,
+        data_key: &[u8; KEY_BYTES],
+        pin: &str,
+        digits: u8,
+    ) -> Result<Self, VaultError> {
+        let salt = random::<SALT_BYTES>()?;
+        let kdf = Kdf {
+            algorithm: ARGON2ID.to_string(),
+            memory_kib: MEMORY_KIB,
+            iterations: ITERATIONS,
+            parallelism: PARALLELISM,
+            salt: B64.encode(salt),
+        };
+
+        let wrapping = derive(&kdf, pin)?;
+        let pin_wrap = seal_with(&wrapping, data_key, &header(VERSION, &kdf))?;
+
+        Ok(Self {
+            version: VERSION,
+            kdf,
+            seed: self.seed.clone(),
+            pin_wrap,
+            digits,
+            device_wrap: self.device_wrap,
+            wrong: 0,
+        })
     }
 
     /// Reads a record, refusing anything this version does not understand.
@@ -390,6 +427,21 @@ mod tests {
             Record::parse(&serde_json::to_vec(&written).expect("json")).expect("still a record");
         assert!(matches!(
             tampered.unwrap_pin("1234"),
+            Err(VaultError::WrongPin)
+        ));
+    }
+
+    #[test]
+    fn changing_the_pin_leaves_the_identity_untouched() {
+        let (record, key) = sealed();
+        let changed = record.rewrap(&key, "654321", 6).expect("entropy");
+
+        let reopened = changed.unwrap_pin("654321").expect("the new PIN");
+        assert_eq!(*changed.seed(&reopened).expect("the seed"), SEED);
+        assert_eq!(changed.digits, 6);
+        // And the old one stops working, which is the whole of what changing it means.
+        assert!(matches!(
+            changed.unwrap_pin("1234"),
             Err(VaultError::WrongPin)
         ));
     }

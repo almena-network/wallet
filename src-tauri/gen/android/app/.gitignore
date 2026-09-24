@@ -4,3 +4,5 @@
 /tauri.build.gradle.kts
 /proguard-tauri.pro
 /tauri.properties
+# The publisher's Firebase project (push); never committed.
+google-services.json

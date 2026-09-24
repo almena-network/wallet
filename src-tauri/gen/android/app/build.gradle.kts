@@ -69,3 +69,7 @@ dependencies {
 }
 
 apply(from = "tauri.build.gradle.kts")
+// Push: Firebase, only when the project's google-services.json is here.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}

@@ -159,6 +159,17 @@ tasks:
         pnpm tauri icon assets/branding/app-icon-macos.png -o .task/icons/macos
         cp .task/icons/macos/icon.icns src-tauri/icons/icon.icns
 
+        # The tray glyphs. Monochrome, and two of them: macOS fills the black one
+        # as a template image to suit its bar, while Windows and Linux draw what
+        # they are given onto a bar that is dark by default. Resized here rather
+        # than by `tauri icon`, which knows nothing about trays — and only where
+        # sips exists, which is macOS; elsewhere the committed glyphs stand.
+        if command -v sips >/dev/null 2>&1; then
+          sips -z 32 32 assets/branding/tray/tray-icon.png --out src-tauri/icons/tray.png >/dev/null
+          sips -z 32 32 assets/branding/tray/tray-icon-light.png --out src-tauri/icons/tray-light.png >/dev/null
+        else
+          echo "Keeping the committed tray glyphs: sips is macOS only."
+        fi
 
         # The web layer shows the mark in the dashboard header and uses it as the
         # favicon, so it is served from public/ as well.
@@ -191,6 +202,16 @@ tasks:
           cp src-tauri/icons/ios/*.png src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/
           echo "iOS icons synced into src-tauri/gen/apple"
         fi
+
+  push:sync:
+    internal: true
+    desc: Put what push needs into the generated native projects
+    dir: src-tauri
+    cmds:
+      # The notification's words, the APNs entitlement and Firebase in the
+      # Android build, which `tauri android|ios init` do not write. See
+      # src-tauri/push/sync.sh.
+      - sh push/sync.sh
 
   # --------------------------------------------------------------------------
   # Mobile
@@ -257,6 +278,7 @@ tasks:
         export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
         pnpm tauri android init
       - task: icons:sync
+      - task: push:sync
 
   init:ios:
     desc: Initialise the iOS project under src-tauri/gen/apple
@@ -271,6 +293,7 @@ tasks:
       # `task deploy:ios` says so when it is missing.
       - 'pnpm tauri ios init'
       - task: icons:sync
+      - task: push:sync
 
   deploy:android:
     desc: Build the whole app and install it on an Android device or emulator

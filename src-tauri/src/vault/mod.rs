@@ -12,9 +12,10 @@
 //! product rests on untrue. The seed derives every key this wallet will ever
 //! sign with, so keeping it is enough, and it cannot be turned back into words.
 //!
-//! A PIN opens the record, and the PIN is not the record: it derives the key
-//! that unwraps it. Opening with the device (a face, a finger) is left for
-//! later; the record format already has room for it. The format is in
+//! Two things open the record and neither of them is the record: a PIN, and —
+//! where the platform has somewhere to keep a key — the device. Either is
+//! enough, which is what lets a sensor that stops recognising somebody not be
+//! the end of an identity, and a forgotten PIN not be either. The format is in
 //! [`record`]; where it is kept is [`store`].
 //!
 //! **The lock lives here now.** It used to be a PIN hash in memory beside the
@@ -29,6 +30,7 @@
 //! whichever screen forgot to count. All of it happens under one lock, so two
 //! answers arriving at once cannot both start from nine attempts left.
 
+mod presence;
 mod record;
 mod store;
 
@@ -70,6 +72,13 @@ pub enum VaultError {
     PinNotDigits,
     /// Asked to write down an identity while none is open.
     NoIdentity,
+    /// Asked to open with the device, and the device holds no key.
+    NoDeviceKey,
+    /// The device would not hand back the key it had just been given, so
+    /// whoever asked to arm it was not recognised.
+    DeviceUnproven,
+    /// This platform has nowhere to keep a device key.
+    NoDeviceStore,
     /// What was found is not a record this wallet reads.
     Unreadable,
     /// A record a later version of the wallet wrote.
@@ -90,6 +99,9 @@ impl VaultError {
             Self::PinLength => "vault_pin_length",
             Self::PinNotDigits => "vault_pin_not_digits",
             Self::NoIdentity => "vault_no_identity",
+            Self::NoDeviceKey => "vault_no_device_key",
+            Self::DeviceUnproven => "vault_device_unproven",
+            Self::NoDeviceStore => "vault_no_device_store",
             Self::Unreadable => "vault_unreadable",
             Self::TooNew => "vault_too_new",
             Self::Storage => "vault_storage",
@@ -120,6 +132,10 @@ pub struct VaultStatus {
     pub problem: Option<&'static str>,
     /// How long the PIN is, so the keypad can be drawn before it is typed.
     pub digits: Option<u8>,
+    /// Whether the device is holding a key, and so whether a face opens this.
+    pub device_key: bool,
+    /// Whether this platform can offer opening with the device at all.
+    pub device_unlock: bool,
     /// Wrong PINs left before the record is destroyed.
     pub attempts_left: u8,
     /// Where the record is kept: the platform's secret store or a private file.
@@ -136,6 +152,8 @@ impl VaultStatus {
             exists: false,
             problem,
             digits: None,
+            device_key: false,
+            device_unlock: false,
             attempts_left: record::ATTEMPTS,
             home: None,
             version: None,
@@ -143,7 +161,13 @@ impl VaultStatus {
     }
 }
 
-/// Reads what is on the device, without opening it.
+/// Reads what is on the device, without opening it and without asking for a face.
+///
+/// **It does not touch the device key.** That item is stored so that the system
+/// will not release it until somebody has been recognised, so reading it here
+/// would raise Face ID on every launch before the lock screen was even drawn —
+/// and a prompt somebody cancelled would then be indistinguishable from a wallet
+/// that was never armed. The record's own note of what it armed is the answer.
 #[tauri::command(async)]
 pub fn vault_status<R: Runtime>(app: tauri::AppHandle<R>, gate: State<'_, Gate>) -> VaultStatus {
     let _held = gate.0.lock();
@@ -206,10 +230,121 @@ pub fn vault_open<R: Runtime>(
     Ok(crate::identity::adopt(record.seed(&key)?, &held))
 }
 
+/// Opens it with the key the device is holding, which the system will not
+/// release until it has recognised somebody.
+///
+/// **The prompt is the lock, not a screen in front of it.** On iOS the item is
+/// stored with `require-user-presence`, so this call is where the face is asked
+/// for — see [`store`].
+///
+/// # Errors
+///
+/// [`VaultError::NoDeviceKey`] when the device is holding nothing, which is also
+/// what a prompt somebody refused looks like from here.
+#[tauri::command(async)]
+pub fn vault_open_with_device<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+) -> Result<Identity, VaultError> {
+    let _guard = gate.0.lock();
+    let (record, _) = load(&app)?.ok_or(VaultError::Nothing)?;
+    let key = store::device_key().ok_or(VaultError::NoDeviceKey)?;
+    let key: [u8; 32] = key
+        .as_slice()
+        .try_into()
+        .map_err(|_| VaultError::NoDeviceKey)?;
+
+    Ok(crate::identity::adopt(record.seed(&key)?, &held))
+}
+
+/// Changes the PIN, leaving the identity exactly as it was.
+///
+/// # Errors
+///
+/// [`VaultError::WrongPin`] when the current one is not right — asked for so
+/// that a wallet left open on a table cannot have its PIN quietly replaced, and
+/// counted like every other answer.
+#[tauri::command(async)]
+pub fn vault_change_pin<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+    current: String,
+    next: String,
+) -> Result<VaultStatus, VaultError> {
+    let _guard = gate.0.lock();
+    let digits = check(&next)?;
+
+    let (record, key) = attempt(&app, &held, &current)?;
+    let changed = record.rewrap(&key, &next, digits)?;
+    store::write(&app, &changed.write())?;
+
+    Ok(status(&app))
+}
+
+/// Arms or disarms opening with the device.
+///
+/// Arming needs the PIN, because arming means handing the platform a key that
+/// opens the wallet — a wallet somebody left unlocked on a table must not be
+/// able to have a second way in added to it.
+///
+/// # Errors
+///
+/// [`VaultError::NoDeviceStore`] where the platform has nowhere to keep a key,
+/// and [`VaultError::WrongPin`] when the digits given do not open the record.
+#[tauri::command(async)]
+pub fn vault_set_device<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+    enabled: bool,
+    pin: Option<String>,
+) -> Result<VaultStatus, VaultError> {
+    let _guard = gate.0.lock();
+
+    if enabled && !device_unlock() {
+        return Err(VaultError::NoDeviceStore);
+    }
+
+    let mut record = if enabled {
+        // Through the same door as every other PIN, so this screen cannot be
+        // used to guess at one forever.
+        let (record, key) = attempt(&app, &held, &pin.ok_or(VaultError::WrongPin)?)?;
+        store::set_device_key(Some(&*key))?;
+
+        // **Armed by proving it opens.** The key was just written behind the
+        // system's own presence check, so asking for it back is what raises the
+        // prompt — and answering it is the only evidence that the person turning
+        // this on is the person it will let in. A wallet left unlocked on a desk
+        // must not be able to have somebody else's face added to it.
+        //
+        // Anything other than the key coming back means it is not armed: a face
+        // refused, a prompt dismissed, a sensor that would not answer. The key
+        // goes rather than sitting there half-turned-on.
+        match store::device_key() {
+            Some(proof) if proof == *key.as_ref() => record,
+            _ => {
+                let _ = store::set_device_key(None);
+                return Err(VaultError::DeviceUnproven);
+            }
+        }
+    } else {
+        store::set_device_key(None)?;
+        load(&app)?.ok_or(VaultError::Nothing)?.0
+    };
+
+    record.device_wrap = enabled;
+    store::write(&app, &record.write())?;
+
+    Ok(status(&app))
+}
+
 /// Takes the identity off the device.
 ///
-/// Signing out is this and nothing else: the record, what messaging wrote down
-/// and the seed in memory all go, and the phrase is what is left.
+/// Signing out is this and nothing else: the record, the device key, what
+/// messaging wrote down and the seed in memory all go, and the phrase is what
+/// is left.
 #[tauri::command(async)]
 pub fn vault_destroy<R: Runtime>(
     app: tauri::AppHandle<R>,
@@ -273,6 +408,28 @@ pub fn manage<R: Runtime>(app: &tauri::AppHandle<R>) {
     app.manage(Gate::default());
 }
 
+/// Whether the wallet may offer to open without the PIN on this platform.
+///
+/// **Only where the system enforces it.** The device key is stored so that it is
+/// not handed back until somebody has been recognised: the prompt is the lock,
+/// not a screen this wallet drew in front of one. Two things have to be true
+/// before that sentence is, and both are asked here rather than assumed:
+///
+/// - there is a store that will hold the key behind its own presence check —
+///   on macOS that is the data protection keychain and only a signed build
+///   reaches it, which is why [`store::has_device_store`] is a probe and not a
+///   `cfg!`;
+/// - and the machine can actually recognise a person. A Mac with no sensor
+///   would fall back to the login password, which is a lock but not the one the
+///   switch says it is.
+///
+/// Where either is false the PIN is the only way in, and the interface says so.
+/// Windows and Linux have stores that hand their items to whoever is logged in,
+/// with no prompt at all; Android has no store this side can reach yet.
+fn device_unlock() -> bool {
+    store::has_device_store() && presence::available()
+}
+
 /// Whether the digits are ones this wallet takes, and how many there are.
 fn check(pin: &str) -> Result<u8, VaultError> {
     let digits = u8::try_from(pin.chars().count()).map_err(|_| VaultError::PinLength)?;
@@ -292,6 +449,8 @@ fn status<R: Runtime>(app: &tauri::AppHandle<R>) -> VaultStatus {
             exists: true,
             problem: None,
             digits: Some(record.digits),
+            device_key: record.device_wrap,
+            device_unlock: device_unlock(),
             attempts_left: record.left(),
             home: Some(home.name()),
             version: Some(record.version),

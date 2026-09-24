@@ -41,5 +41,22 @@
     "iOS": {
       "minimumSystemVersion": "15.0"
     }
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": [
+            "almena"
+          ],
+          "appLink": false
+        }
+      ],
+      "desktop": {
+        "schemes": [
+          "almena"
+        ]
+      }
+    }
   }
 }

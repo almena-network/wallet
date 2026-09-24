@@ -22,6 +22,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use url::Url;
 
+use super::chat;
 use super::mediator::{self, Mediator};
 use super::peer::Peer;
 use super::state::Relationship;
@@ -36,9 +37,11 @@ pub const PING_RESPONSE: &str = "https://didcomm.org/trust-ping/2.0/ping-respons
 const CONNECT: &str = "connect";
 const REQUEST_MEDIATE: &str = "request-mediate";
 
-/// The scheme the invitation link is written with. A wallet that opens links
-/// registers it; anything else still reads the `_oob` parameter.
-const LINK: &str = "didcomm://invite";
+/// The scheme the invitation link is written with: this wallet's own, which it
+/// registers with the system so the link opens it. Reading does not depend on
+/// it — any link with an `_oob` parameter is read, `didcomm://` and `https://`
+/// from other wallets included.
+const LINK: &str = "almena://invite";
 
 /// An invitation somebody pasted: who to write to, and in which thread.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,17 +138,16 @@ pub async fn accept(
     ping.pthid = Some(invitation.id.clone());
     send(mediator, &pairwise, &invitation.from, ping).await?;
 
-    Ok(Relationship {
-        ours: pairwise.did,
-        theirs: invitation.from.clone(),
-        origin: invitation.from.clone(),
-        pending: true,
-        since: almena_didcomm::message::now(),
-    })
+    Ok(Relationship::new(
+        pairwise.did,
+        invitation.from.clone(),
+        true,
+    ))
 }
 
 /// Somebody wrote to the card: gives them a pairwise, registers it, and
-/// answers from it with the rotation away from the card.
+/// answers from it with the rotation away from the card — then sends this
+/// wallet's name, `profile`, and asks for theirs.
 ///
 /// Returns the relationship, new or the one they already had.
 pub async fn welcome(
@@ -155,6 +157,7 @@ pub async fn welcome(
     card: &Peer,
     ping: &Message,
     relationships: &[Relationship],
+    profile: Option<&str>,
 ) -> Result<Relationship, MessagingError> {
     let sender = ping
         .from
@@ -171,18 +174,15 @@ pub async fn welcome(
     response.thid = Some(ping.id.clone());
     response.from_prior = Some(rotation);
     send(mediator, &pairwise, sender, response).await?;
+    // The relationship is open whether or not this arrives; a name is only
+    // missing until the next time it is sent.
+    let _ = chat::send_profile(mediator, &pairwise, sender, profile, true).await;
 
     Ok(relationships
         .iter()
         .find(|r| r.origin == sender)
         .cloned()
-        .unwrap_or(Relationship {
-            ours: pairwise.did,
-            theirs: sender.to_owned(),
-            origin: sender.to_owned(),
-            pending: false,
-            since: almena_didcomm::message::now(),
-        }))
+        .unwrap_or_else(|| Relationship::new(pairwise.did, sender.to_owned(), false)))
 }
 
 /// Packs `message` from `from` to `to` — authcrypted, wrapped in a `forward`
@@ -251,7 +251,7 @@ mod tests {
             read(&url),
             Err(MessagingError::InvitationUnreadable)
         ));
-        for input in ["", "hello", "didcomm://invite", "didcomm://invite?_oob=!!"] {
+        for input in ["", "hello", "almena://invite", "almena://invite?_oob=!!"] {
             assert!(read(input).is_err(), "{input}");
         }
     }

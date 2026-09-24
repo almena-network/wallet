@@ -1,7 +1,8 @@
 import { useState } from "react";
 
 import { ChevronLeftIcon } from "../components/icons";
-import { fill, useTranslations } from "../i18n";
+import { useTranslations } from "../i18n";
+import { fill } from "../i18n/format";
 import { PinScreen } from "./PinScreen";
 
 type PinSetupProps = {

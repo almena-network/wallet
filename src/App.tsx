@@ -1,32 +1,60 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { BrandSpinner } from "./components/BrandSpinner";
 import { LiquidTabBar, type TabDefinition } from "./components/LiquidTabBar";
-import { HomeIcon, MessagesIcon, SettingsIcon } from "./components/icons";
-import { plural, useI18n } from "./i18n";
+import { HomeIcon, MessagesIcon, ProfileIcon, QrIcon } from "./components/icons";
+import { useI18n } from "./i18n";
+import { plural } from "./i18n/format";
 import { useAccent } from "./appearance";
+import { useAutoLock, useIdle } from "./autolock";
 import { useBackdrop } from "./backdrop";
+import { invitationKind, useDeepLinks } from "./links";
+import { useLive } from "./live";
+import { useBackInSight } from "./lock";
+import { usePlatform } from "./platform";
+import { registerPush, unregisterPush } from "./push";
 import { forgetIdentity, type Identity } from "./identity";
 import { useTheme } from "./theme";
-import { destroyVault, errorCode as vaultErrorCode, openVault, useVault } from "./vault";
+import { useTray } from "./tray";
+import {
+  destroyVault,
+  errorCode as vaultErrorCode,
+  openVault,
+  openVaultWithDevice,
+  useVault,
+} from "./vault";
+import { AcceptInvitationScreen } from "./screens/AcceptInvitationScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LogoutScreen } from "./screens/LogoutScreen";
+import { MediatorConnectScreen } from "./screens/MediatorConnectScreen";
 import { MessagesTab } from "./screens/MessagesTab";
 import { PinScreen } from "./screens/PinScreen";
-import { SettingsScreen } from "./screens/SettingsScreen";
+import { ProfileScreen } from "./screens/ProfileScreen";
+import { ScanScreen } from "./screens/ScanScreen";
 import { Onboarding } from "./screens/onboarding/Onboarding";
 
-type Route = "home" | "messages" | "settings";
+type Route = "home" | "messages" | "scan" | "profile";
+
+/** An invitation that came from outside — a link or a code — waiting to be put to the person. */
+type Link = { kind: "contact" | "mediator"; url: string };
 
 export default function App() {
   const { t, locale } = useI18n();
-  // Applied for the tokens they put on the root element; nothing chooses them
-  // yet, so the stored or default palette is what is worn.
-  useAccent();
-  const { theme } = useTheme();
+  // Applied for the tokens they put on the root element, and chosen in
+  // Profile → Appearance.
+  const { accent, setAccent } = useAccent();
+  const { theme, setTheme } = useTheme();
+  const { autoLock, setAutoLock } = useAutoLock();
+  const platform = usePlatform();
+  // On a computer, the wallet on the system tray: closing the window puts it
+  // away rather than ending it, and the tray's menu is where it is quit.
+  useTray();
+  // While the scanner's preview is live the camera is drawn behind the page,
+  // and the chrome steps aside for it.
+  const [cameraPreview, setCameraPreview] = useState(false);
   // The window behind the page wears the page's colour — see `backdrop`. Read
   // after `useTheme`, because it reads the palette that hook just applied.
-  useBackdrop(theme, false);
+  useBackdrop(theme, cameraPreview);
   const vault = useVault();
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [route, setRoute] = useState<Route>("home");
@@ -35,12 +63,62 @@ export default function App() {
   // Signing out is reachable from Settings, from behind the lock and from a
   // record that cannot be opened; it is one screen whichever way it is reached.
   const [signOutAsked, setSignOutAsked] = useState(false);
+  // A keypad that takes the whole screen — replacing the PIN, arming the
+  // device — has the bar step aside: under a keypad it is a band of nothing, and
+  // a stray tap there is a tap past the question.
+  const [keypad, setKeypad] = useState(false);
+
+  // **Links and codes from outside go to a screen that asks, never straight to
+  // an action.** A `almena://` link that opened the wallet, or a code the
+  // scanner read, is kept here until an identity is open — a link that arrives
+  // behind the lock waits for the PIN — and then shown on the screen that
+  // accepts an invitation or connects to a mediator, with the person deciding.
+  const [link, setLink] = useState<Link | null>(null);
+  const openLink = useCallback(async (url: string) => {
+    const kind = await invitationKind(url);
+    if (kind !== "unknown") {
+      setLink({ kind, url });
+    }
+  }, []);
+  useDeepLinks((url) => void openLink(url));
+  // Messages arrive live while an identity is open and the wallet is seen.
+  useLive(identity !== null);
+  // And while it is not running, the mediator notifies this device.
+  useEffect(() => {
+    if (identity !== null) {
+      void registerPush();
+    }
+  }, [identity]);
+
+  // **Locking is letting go, not hiding.** There is no flag that says the wallet
+  // is closed while the seed sits behind it in memory: the lock drops the
+  // identity, and coming back opens the record again with a PIN or a face.
+  // Live delivery stops with it, since it follows `identity`.
+  const lockNow = useCallback(() => {
+    setIdentity((open) => {
+      if (open) {
+        void forgetIdentity();
+      }
+      return null;
+    });
+    setRoute("home");
+  }, []);
+
+  // One clock, for every way of not using the wallet — left open on a desk or
+  // left behind for another app — armed only while a wallet is open. Coming
+  // back is when the clock is asked the time, for a webview whose timer the
+  // system throttled or froze while nobody could see it.
+  const catchUp = useIdle(autoLock, identity !== null, lockNow);
+  useBackInSight(catchUp);
 
   // Signing out is not locking: the record itself goes, and the phrase is what
   // is left.
   const signOut = useCallback(async () => {
     setRoute("home");
     setSignOutAsked(false);
+    // While the identity can still speak to its mediator: a device that keeps
+    // being woken for an identity that has left it is told nothing true.
+    await unregisterPush();
     setIdentity(null);
     setUnlockError(null);
     void forgetIdentity();
@@ -48,11 +126,11 @@ export default function App() {
   }, [vault]);
 
   const unlock = useCallback(
-    async (pin: string) => {
+    async (open: () => Promise<Identity>) => {
       setUnlockError(null);
       setUnlockBusy(true);
       try {
-        setIdentity(await openVault(pin));
+        setIdentity(await open());
       } catch (failure) {
         setUnlockError(t.vault.errors[vaultErrorCode(failure)]);
         // The count of what is left changed, and a record spent to its last
@@ -140,8 +218,8 @@ export default function App() {
     );
   }
 
-  // There is one, and it is not open. The only ways past are the PIN and
-  // signing out to start again from the words.
+  // There is one, and it is not open. The only ways past are the PIN, a face
+  // where the system will vouch for one, and signing out to start from the words.
   if (!identity) {
     return (
       <div className="app">
@@ -153,8 +231,15 @@ export default function App() {
             error={unlockError}
             busy={unlockBusy}
             busyLabel={t.pin.checking}
+            onBiometrics={
+              vault.status.deviceKey
+                ? () => {
+                    void unlock(openVaultWithDevice);
+                  }
+                : undefined
+            }
             onComplete={(code) => {
-              void unlock(code);
+              void unlock(() => openVault(code));
             }}
             footer={
               <>
@@ -181,23 +266,75 @@ export default function App() {
     );
   }
 
+  // **Scanning is offered only where it can happen.** A computer has no camera
+  // the wallet may drive, and it opens invitations as `almena://` links
+  // instead. The answer comes from the Rust side, from the same switch that
+  // decided whether to register the scanner at all.
   const tabs: TabDefinition<Route>[] = [
     { id: "home", label: t.nav.home, icon: <HomeIcon /> },
     { id: "messages", label: t.nav.messages, icon: <MessagesIcon /> },
-    { id: "settings", label: t.nav.settings, icon: <SettingsIcon /> },
+    ...(platform.barcodeScanner ? [{ id: "scan" as const, label: t.nav.scan, icon: <QrIcon /> }] : []),
+    { id: "profile", label: t.nav.profile, icon: <ProfileIcon /> },
   ];
 
+  if (link) {
+    return (
+      <div className="app">
+        <main className="app__view" key="link">
+          {link.kind === "contact" ? (
+            <AcceptInvitationScreen
+              initial={link.url}
+              onBack={() => setLink(null)}
+              onAccepted={() => {
+                setLink(null);
+                setRoute("messages");
+              }}
+            />
+          ) : (
+            <MediatorConnectScreen
+              initial={link.url}
+              onBack={() => setLink(null)}
+              onConnected={() => {
+                setLink(null);
+                void registerPush();
+              }}
+            />
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="app">
-      <main className="app__view" key={route}>
+    <div className={cameraPreview ? "app app--camera" : "app"}>
+      <main className={keypad ? "app__view app__view--plain" : "app__view"} key={route}>
         {route === "home" ? <HomeScreen /> : null}
         {route === "messages" ? <MessagesTab /> : null}
-        {route === "settings" ? (
-          <SettingsScreen vault={vault.status} onSignOut={() => setSignOutAsked(true)} />
+        {route === "scan" ? (
+          <ScanScreen
+            onBack={() => setRoute("home")}
+            onPreviewChange={setCameraPreview}
+            onInvitation={(content) => void openLink(content)}
+          />
+        ) : null}
+        {route === "profile" ? (
+          <ProfileScreen
+            vault={vault}
+            accent={accent}
+            onAccentChange={setAccent}
+            theme={theme}
+            onThemeChange={setTheme}
+            autoLock={autoLock}
+            onAutoLockChange={setAutoLock}
+            onKeypad={setKeypad}
+            onSignOut={() => setSignOutAsked(true)}
+          />
         ) : null}
       </main>
 
-      <LiquidTabBar label={t.nav.label} tabs={tabs} active={route} onSelect={setRoute} />
+      {keypad || cameraPreview ? null : (
+        <LiquidTabBar label={t.nav.label} tabs={tabs} active={route} onSelect={setRoute} />
+      )}
     </div>
   );
 }

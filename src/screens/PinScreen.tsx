@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { BrandSpinner } from "../components/BrandSpinner";
-import { BackspaceIcon, ChevronLeftIcon } from "../components/icons";
+import { BackspaceIcon, BiometricIcon, ChevronLeftIcon } from "../components/icons";
 import { useTranslations } from "../i18n";
 
 type PinScreenProps = {
@@ -15,6 +15,8 @@ type PinScreenProps = {
   onComplete: (code: string) => void;
   /** When given, a back arrow appears. The lock screen has none. */
   onBack?: () => void;
+  /** Offered next to the keypad, for a wallet that unlocks with a face. */
+  onBiometrics?: () => void;
   /** The way out for somebody who does not remember the code. */
   footer?: React.ReactNode;
   /**
@@ -59,6 +61,7 @@ export function PinScreen({
   error,
   onComplete,
   onBack,
+  onBiometrics,
   footer,
   busy = false,
   busyLabel,
@@ -146,7 +149,18 @@ export function PinScreen({
           </button>
         ))}
 
-        <span className="pin__key pin__key--empty" aria-hidden="true" />
+        {onBiometrics ? (
+          <button
+            type="button"
+            className="pin__key pin__key--quiet"
+            onClick={onBiometrics}
+            aria-label={t.pin.useBiometrics}
+          >
+            <BiometricIcon />
+          </button>
+        ) : (
+          <span className="pin__key pin__key--empty" aria-hidden="true" />
+        )}
 
         <button
           type="button"

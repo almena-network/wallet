@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 import { ChevronLeftIcon, CredentialIcon } from "../components/icons";
 import { SlideToConfirm } from "../components/SlideToConfirm";
-import { fill, useTranslations } from "../i18n";
+import { useTranslations } from "../i18n";
+import { fill } from "../i18n/format";
 
 /** How long the page insists on being read before it will let anybody out. */
 const READ_SECONDS = 10;

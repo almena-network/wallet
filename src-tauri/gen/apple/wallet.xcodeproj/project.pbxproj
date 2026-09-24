@@ -19,6 +19,7 @@
 		CA4F5B3908601F55B8FEA35A /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 23ADC287FCA0DD25D9D1C1A9 /* Metal.framework */; };
 		D0D97D2F8024B4F897A49895 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BCEC9FBCE6F168B60BDA3851 /* WebKit.framework */; };
 		EF70A1B4BDC2E982738DF2B7 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = BAE7A51EDF9FE007BA53A4A2 /* assets */; };
+		A1A1E0000000000000000001 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A1A1E0000000000000000002 /* Localizable.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,8 @@
 		DA743C2F4E1CC1F03F54F672 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		E840600C4578FFF77510043D /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		FED4CAFC7735E737EC5E97DB /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		A1A1E0000000000000000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A1A1E0000000000000000004 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +86,7 @@
 			children = (
 				05FDD96F75AEDEB86559E3A1 /* Info.plist */,
 				6309B9B8963D919F1E42A61E /* wallet_iOS.entitlements */,
+				A1A1E0000000000000000002 /* Localizable.strings */,
 			);
 			path = wallet_iOS;
 			sourceTree = "<group>";
@@ -192,6 +196,7 @@
 			knownRegions = (
 				Base,
 				en,
+				es,
 			);
 			mainGroup = ED1E329F22BFFFC1C4F80D31;
 			minimizedProjectReferenceProxies = 1;
@@ -210,6 +215,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1A1E0000000000000000001 /* Localizable.strings in Resources */,
 				4D5BC986E9FC27669B801E04 /* Assets.xcassets in Resources */,
 				7B3D4E3FAA47EC9FAD860DF5 /* LaunchScreen.storyboard in Resources */,
 				EF70A1B4BDC2E982738DF2B7 /* assets in Resources */,
@@ -253,6 +259,18 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXVariantGroup section */
+		A1A1E0000000000000000002 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A1A1E0000000000000000003 /* en */,
+				A1A1E0000000000000000004 /* es */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin XCBuildConfiguration section */
 		24F8812254A561EDCA39FBBB /* release */ = {
 			isa = XCBuildConfiguration;
@@ -262,7 +280,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = wallet_iOS/wallet_iOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = XDUFSW425R;
+				DEVELOPMENT_TEAM = "XDUFSW425R";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -306,7 +324,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = wallet_iOS/wallet_iOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = XDUFSW425R;
+				DEVELOPMENT_TEAM = "XDUFSW425R";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (

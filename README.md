@@ -10,8 +10,12 @@ It is at an early stage: the shell, the look and the build for every platform
 are in place, and so is onboarding — creating an identity from a new BIP-39
 phrase or bringing one back from an existing phrase, then keeping it on the
 device encrypted behind a PIN — and connecting to a mediator: the wallet asks
-it for mediation, registers an inbox DID derived from the phrase, and can ask
-how many messages are waiting. Reading and sending messages is next.
+it for mediation and registers an inbox DID derived from the phrase. Contacts
+are made with an invitation, as a QR code or a link, and each gets a DID of
+its own; with them the wallet exchanges names and text messages, kept on the
+device encrypted. While the wallet is open they arrive live, over a WebSocket to the mediator;
+while it is not, on Android and iOS the mediator sends a push notification that
+says only that something is waiting.
 
 ## Requirements
 
@@ -71,6 +75,38 @@ APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
 
 It is the Team ID under developer.apple.com > Membership; `TEAM=XXXXXXXXXX` on
 the command line overrides it.
+
+## On a computer
+
+The wallet lives on the system tray. Closing the window puts it away rather
+than ending it — messages keep arriving — and clicking the tray icon (or the
+Dock icon on macOS) brings it back; the tray's menu is where it is quit. A
+second launch brings the running one to the front instead of starting another,
+and the window reopens where it was left.
+
+## Links and codes
+
+`almena://` links — the wallet's own invitations are written that way — open
+the wallet on every platform. On a phone the Scan QR tab reads the same
+invitations, and a mediator's, from a code. On macOS a link only reaches an
+installed copy of the wallet (in `/Applications`), not one run with `task dev`.
+
+## Push notifications
+
+The mediator notifies a phone through Firebase Cloud Messaging (Android) or
+APNs (iOS), with the credentials of whoever publishes the app — see the
+mediator's `docs/didcomm.md` §5. On the wallet's side:
+
+- **Android** needs the Firebase project's `google-services.json` in
+  `src-tauri/gen/android/app/` (not committed). Without it the app builds and
+  simply receives no pushes.
+- **iOS** needs an App ID with the Push Notifications capability for
+  `network.almena.wallet`; the entitlement is already in the project.
+
+The words of the notification are in `src-tauri/push/`, in the app's own
+strings, so the phone shows them in its language. `task init:android` and
+`task init:ios` put them, the entitlement and the Firebase setup back into the
+regenerated projects.
 
 ## Branding
 

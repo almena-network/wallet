@@ -1,31 +1,26 @@
 import { useEffect, useState } from "react";
 
-import { ChevronLeftIcon, MessagesIcon, QrIcon } from "../components/icons";
-import { fill, useI18n } from "../i18n";
-import { listContacts, syncMessages, type Contact } from "../contacts";
+import { ChevronLeftIcon } from "../components/icons";
+import { useI18n } from "../i18n";
+import { fill } from "../i18n/format";
+import { listContacts, onMessagesChanged, syncMessages, type Contact } from "../contacts";
 import { errorCode } from "../mediator";
+import { initial } from "./MessagesScreen";
 
 type NewConversationScreenProps = {
   onBack: () => void;
-  /** Opens this wallet's own invitation, as a code and a link. */
-  onShowInvitation: () => void;
-  /** Opens the screen where somebody else's invitation is pasted. */
-  onAcceptInvitation: () => void;
+  /** Opens the conversation with a contact. */
+  onOpen: (id: string) => void;
 };
 
 /**
- * Where a conversation starts: with somebody this wallet already has a
- * relationship with, with somebody found in the directory, or with somebody in
- * front of it — by showing an invitation or reading theirs.
+ * Where a conversation starts: with somebody found in the directory, or with
+ * somebody this wallet already has a relationship with.
  *
  * It syncs as it opens, so a relationship somebody opened by accepting this
  * wallet's invitation is in the list by the time it is drawn.
  */
-export function NewConversationScreen({
-  onBack,
-  onShowInvitation,
-  onAcceptInvitation,
-}: NewConversationScreenProps) {
+export function NewConversationScreen({ onBack, onOpen }: NewConversationScreenProps) {
   const { t, locale } = useI18n();
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +40,9 @@ export function NewConversationScreen({
     };
   }, [t]);
 
+  // A contact who accepts this wallet's invitation while it is open appears.
+  useEffect(() => onMessagesChanged((synced) => setContacts(synced.contacts)), []);
+
   const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
 
   return (
@@ -58,6 +56,41 @@ export function NewConversationScreen({
 
       {error ? <p className="card__note card__note--warning">{error}</p> : null}
 
+      <form
+        className="card"
+        aria-labelledby="new-directory"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setSearched(query.trim().length > 0);
+        }}
+      >
+        <h2 className="card__title" id="new-directory">
+          {t.conversations.new.directory.title}
+        </h2>
+        {/* Searched with the keyboard's own key: the card is the title and
+            the box, nothing else. */}
+        <input
+          className="field__input"
+          type="search"
+          enterKeyHint="search"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setSearched(false);
+          }}
+          placeholder={t.conversations.new.directory.placeholder}
+          aria-labelledby="new-directory"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        {/* The directory is not published yet; the search is here so the
+            screen has its final shape, and says so when it is used. */}
+        {searched ? (
+          <p className="card__note">{t.conversations.new.directory.unavailable}</p>
+        ) : null}
+      </form>
+
       <section className="card" aria-labelledby="new-contacts">
         <h2 className="card__title" id="new-contacts">
           {t.conversations.new.contacts}
@@ -66,9 +99,14 @@ export function NewConversationScreen({
           <p className="card__body">{t.conversations.new.empty}</p>
         ) : (
           contacts.map((contact) => (
-            <div className="row" key={contact.id}>
-              <span className="row__icon">
-                <MessagesIcon />
+            <button
+              type="button"
+              className="row"
+              key={contact.id}
+              onClick={() => onOpen(contact.id)}
+            >
+              <span className="row__icon row__icon--initial" aria-hidden="true">
+                {initial(contact.name)}
               </span>
               <span className="row__text">
                 <span className="row__label">{contact.name}</span>
@@ -80,69 +118,11 @@ export function NewConversationScreen({
                       })}
                 </span>
               </span>
-            </div>
+            </button>
           ))
         )}
       </section>
 
-      <form
-        className="card"
-        aria-labelledby="new-directory"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setSearched(true);
-        }}
-      >
-        <h2 className="card__title" id="new-directory">
-          {t.conversations.new.directory.title}
-        </h2>
-        <label className="field">
-          <span className="field__label">{t.conversations.new.directory.label}</span>
-          <input
-            className="field__input"
-            type="search"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setSearched(false);
-            }}
-            placeholder={t.conversations.new.directory.placeholder}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-        </label>
-        {/* The directory is not published yet; the search is here so the
-            screen has its final shape, and says so when it is used. */}
-        {searched ? (
-          <p className="card__note">{t.conversations.new.directory.unavailable}</p>
-        ) : null}
-        <div className="button-row">
-          <button
-            type="submit"
-            className="button"
-            disabled={query.trim().length === 0}
-          >
-            {t.conversations.new.directory.search}
-          </button>
-        </div>
-      </form>
-
-      <section className="card" aria-labelledby="new-invite">
-        <h2 className="card__title" id="new-invite">
-          {t.conversations.new.invite.title}
-        </h2>
-        <p className="card__body">{t.conversations.new.invite.hint}</p>
-        <div className="button-row">
-          <button type="button" className="button button--primary button--icon" onClick={onShowInvitation}>
-            <QrIcon />
-            {t.conversations.new.invite.show}
-          </button>
-          <button type="button" className="button" onClick={onAcceptInvitation}>
-            {t.conversations.new.invite.accept}
-          </button>
-        </div>
-      </section>
     </div>
   );
 }

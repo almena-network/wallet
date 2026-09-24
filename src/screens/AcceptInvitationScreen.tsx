@@ -7,14 +7,20 @@ import { acceptInvitation, type Contact } from "../contacts";
 import { errorCode } from "../mediator";
 
 type AcceptInvitationScreenProps = {
+  /** An invitation already read — from a link or a code — to be looked at first. */
+  initial?: string;
   onBack: () => void;
   onAccepted: (contact: Contact) => void;
 };
 
 /** Somebody else's invitation, pasted: accepting it says hello from a new pairwise. */
-export function AcceptInvitationScreen({ onBack, onAccepted }: AcceptInvitationScreenProps) {
+export function AcceptInvitationScreen({
+  initial,
+  onBack,
+  onAccepted,
+}: AcceptInvitationScreenProps) {
   const t = useTranslations();
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initial ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

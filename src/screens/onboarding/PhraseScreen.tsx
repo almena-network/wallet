@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { ChevronLeftIcon } from "../../components/icons";
-import { plural, useI18n } from "../../i18n";
+import { useI18n } from "../../i18n";
+import { plural } from "../../i18n/format";
 import { PHRASE_LENGTHS, type PhraseLength } from "../../identity";
 
 type PhraseScreenProps = {

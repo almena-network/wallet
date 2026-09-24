@@ -7,20 +7,91 @@
     "label": "Main sections",
     "home": "Home",
     "messages": "Messages",
-    "settings": "Settings",
+    "scan": "Scan QR",
+    "profile": "Profile",
     "back": "Back"
+  },
+  "tray": {
+    "quit": "Quit"
   },
   "home": {
     "greeting": "Your wallet"
+  },
+  "profile": {
+    "changePhoto": "Change photo",
+    "removePhoto": "Remove photo",
+    "noName": "No name yet",
+    "photoUnreadable": "That picture could not be opened. Try another one."
+  },
+  "scan": {
+    "title": "Scan QR",
+    "instruction": "Line the QR code up inside the frame",
+    "hint": "Hold the device steady until the code is read",
+    "starting": "Starting the camera",
+    "permission": {
+      "deniedTitle": "Camera access is turned off",
+      "deniedBody": "Turn the camera back on for the wallet in the system settings, then come back to this screen.",
+      "openSettings": "Open system settings"
+    },
+    "error": {
+      "title": "The camera could not be started",
+      "retry": "Try again"
+    },
+    "result": {
+      "title": "Code read",
+      "again": "Scan another code",
+      "unknown": "It is not an invitation this wallet can read."
+    }
   },
   "messages": {
     "title": "Messages",
     "newConversation": "New conversation",
     "empty": "No messages yet",
-    "emptyHint": "Conversations you open will show up here."
+    "emptyHint": "Invite somebody, or accept their invitation, with the + button.",
+    "sync": "Check for messages",
+    "mine": "You: {content}",
+    "nothingYet": "Nothing said yet"
   },
   "settings": {
     "title": "Settings",
+    "sections": {
+      "profile": {
+        "title": "Profile",
+        "hint": "Your photo and your name"
+      },
+      "appearance": {
+        "title": "Appearance",
+        "hint": "The colour the wallet wears"
+      },
+      "messaging": {
+        "title": "Messaging",
+        "hint": "Where your messages wait"
+      },
+      "security": {
+        "title": "Security",
+        "hint": "The identity on this device"
+      }
+    },
+    "appearance": {
+      "title": "Appearance",
+      "colour": {
+        "title": "Identity colour"
+      },
+      "colours": {
+        "orange": "Orange",
+        "blue": "Blue",
+        "red": "Red",
+        "yellow": "Yellow",
+        "green": "Green"
+      },
+      "default": "Default",
+      "theme": {
+        "title": "Mode",
+        "system": "System",
+        "dark": "Dark",
+        "light": "Light"
+      }
+    },
     "security": {
       "title": "Security",
       "pinLabel": "PIN",
@@ -32,7 +103,29 @@
       "signOut": "Sign out",
       "keptLabel": "Kept in",
       "keptInStore": "This device's own secret store",
-      "keptInFile": "This application's private storage"
+      "keptInFile": "This application's private storage",
+      "lockTitle": "Locking the wallet",
+      "pinChange": "Change it",
+      "biometricsLabel": "Biometrics",
+      "biometricsUnavailable": "Not available on this device",
+      "autoLockLabel": "Lock after",
+      "autoLockMinutes": {
+        "one": "{count} minute",
+        "other": "{count} minutes"
+      }
+    },
+    "profile": {
+      "title": "Your name",
+      "hint": "What your contacts see you as. Each gets it only through the address they know you by.",
+      "label": "Name",
+      "placeholder": "How should they call you?",
+      "save": "Save and send",
+      "saving": "Sending…",
+      "saved": "Saved and sent to your contacts.",
+      "unreached": {
+        "one": "Saved. {count} contact could not be reached; they will get it with your next change.",
+        "other": "Saved. {count} contacts could not be reached; they will get it with your next change."
+      }
     },
     "mediator": {
       "title": "Mediator",
@@ -122,7 +215,12 @@
       "one": "{count} attempt left. When it is gone the identity is removed from this device, and your phrase is the way back.",
       "other": "{count} attempts left. When they are gone the identity is removed from this device, and your phrase is the way back."
     },
-    "checking": "Checking your PIN"
+    "checking": "Checking your PIN",
+    "useBiometrics": "Use biometrics",
+    "currentTitle": "Your current PIN",
+    "currentSubtitle": "Asked for first, so nobody who finds the wallet open can replace it.",
+    "replaceIntro": "The identity itself is untouched. Only the digits that open it change.",
+    "armSubtitle": "Your PIN, once, and this device is given a key of its own."
   },
   "vault": {
     "errors": {
@@ -137,7 +235,10 @@
       "vault_too_new": "This was written by a newer version of the wallet. Update it, and the identity will be here.",
       "vault_storage": "The identity could not be read from this device. Nothing has been changed.",
       "vault_entropy": "This device would not supply the randomness the encryption needs. Nothing has been written.",
-      "vault_unknown": "That did not work. Try again."
+      "vault_unknown": "That did not work. Try again.",
+      "vault_no_device_key": "This device is not holding a key. Use your PIN.",
+      "vault_device_unproven": "This device did not recognise you, so nothing has been turned on. Try again, or carry on with your PIN.",
+      "vault_no_device_store": "This device cannot keep a key of its own, so the PIN is the way in."
     },
     "problem": {
       "title": "This device is holding an identity it cannot open",
@@ -179,7 +280,11 @@
       "messaging_entropy": "This device would not supply the randomness the encryption needs. Nothing has been written.",
       "messaging_unknown": "That did not work. Try again.",
       "messaging_invitation_own": "That is your own invitation. Send it to somebody else.",
-      "messaging_counterparty_unreachable": "The other person could not be reached. Try again later."
+      "messaging_counterparty_unreachable": "The other person could not be reached. Try again later.",
+      "messaging_pending": "They have not answered your invitation yet. You can write once they do.",
+      "messaging_contact_unknown": "That contact is not on this device.",
+      "messaging_message_invalid": "A message cannot be empty or longer than 4,000 characters.",
+      "messaging_photo_invalid": "That picture is not one this wallet can keep. Try another one."
     }
   },
   "conversations": {
@@ -191,16 +296,8 @@
       "since": "Since {date}",
       "directory": {
         "title": "Search the directory",
-        "label": "Name or alias",
         "placeholder": "Who are you looking for?",
-        "search": "Search",
         "unavailable": "The directory is not available yet. For now, share an invitation."
-      },
-      "invite": {
-        "title": "Invite somebody",
-        "hint": "Show your code to somebody in front of you, or send them the link. If they sent you theirs, accept it.",
-        "show": "Show my invitation",
-        "accept": "I have an invitation"
       }
     },
     "invite": {
@@ -215,9 +312,31 @@
       "title": "Accept an invitation",
       "intro": "Paste the invitation link somebody sent you.",
       "label": "Invitation link",
-      "placeholder": "didcomm://invite?_oob=…",
+      "placeholder": "almena://invite?_oob=…",
       "submit": "Accept",
       "accepting": "Saying hello"
+    },
+    "chat": {
+      "details": "Contact details",
+      "history": "Messages",
+      "empty": "Nothing said yet. Say hello.",
+      "pending": "Waiting for them to answer your invitation. You can write once they do.",
+      "pendingShort": "Waiting for them to answer",
+      "placeholder": "Message",
+      "send": "Send",
+      "failed": "Not sent. Try again"
+    },
+    "contact": {
+      "title": "Contact",
+      "theirName": "Their name",
+      "noName": "Not given",
+      "fingerprint": "Fingerprint",
+      "since": "Relationship",
+      "aliasTitle": "Your name for them",
+      "aliasHint": "Only on this device. It is shown instead of theirs.",
+      "aliasLabel": "Name",
+      "save": "Save",
+      "clear": "Use their name"
     }
   }
 }

@@ -12,14 +12,27 @@
 //!   all derived from the seed.
 //! - [`mediator`]: finding a mediator and talking to it.
 //! - [`contacts`]: invitations and the handshake that opens a relationship.
-//! - [`state`]: the mediator and the relationships, sealed under the seed.
+//! - [`chat`]: what is said once it is open — text, and each side's name.
+//! - [`state`]: the mediator, this wallet's name and the relationships, sealed
+//!   under the seed.
+//! - [`conversation`]: what was said in each relationship, sealed the same way.
+//! - [`live`]: a WebSocket to the mediator while the wallet is in front, down
+//!   which messages arrive as they are sent.
+//! - [`photo`]: the picture the wallet shows for its own identity.
+//! - [`push`]: the device token the mediator notifies while the wallet is not
+//!   running.
 //!
 //! Everything here needs the wallet open: every key and the state key come
 //! from the seed, which is only held while it is.
 
+mod chat;
 mod contacts;
+mod conversation;
+pub mod live;
 mod mediator;
 mod peer;
+mod photo;
+mod push;
 mod state;
 
 use almena_didcomm::{unpack, InMemorySecrets, Message};
@@ -30,9 +43,10 @@ use tauri::{Manager, Runtime, State};
 use zeroize::Zeroizing;
 
 use crate::identity::Held;
+use conversation::Entry;
 use mediator::Mediator;
 use peer::Peer;
-use state::{Mediation, Relationship};
+use state::{Last, Mediation, Relationship};
 
 const STATUS_REQUEST: &str = "https://didcomm.org/messagepickup/3.0/status-request";
 
@@ -59,6 +73,14 @@ pub enum MessagingError {
     CounterpartyUnreachable,
     /// Asked for something that needs a mediation this wallet does not have.
     NotConnected,
+    /// Written to somebody who has not answered the invitation yet.
+    Pending,
+    /// A contact or a message this wallet does not have.
+    ContactUnknown,
+    /// A message that is empty or too long to send.
+    MessageInvalid,
+    /// A picture that is not a small JPEG.
+    PhotoInvalid,
     /// The keys could not be made or used.
     Keys,
     /// The state on disk is not one this wallet can open.
@@ -80,6 +102,10 @@ impl MessagingError {
             Self::MediatorRefused => "messaging_mediator_refused",
             Self::CounterpartyUnreachable => "messaging_counterparty_unreachable",
             Self::NotConnected => "messaging_not_connected",
+            Self::Pending => "messaging_pending",
+            Self::ContactUnknown => "messaging_contact_unknown",
+            Self::MessageInvalid => "messaging_message_invalid",
+            Self::PhotoInvalid => "messaging_photo_invalid",
             Self::Keys => "messaging_keys",
             Self::Unreadable => "messaging_unreadable",
             Self::Storage => "messaging_storage",
@@ -127,27 +153,64 @@ pub struct Waiting {
 }
 
 /// A relationship as the interface shows it. The DIDs stay on this side.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Contact {
-    /// A stable identifier for the interface to key rows by.
+    /// The conversation's id, which the commands that act on one take.
     pub id: String,
-    /// A short fingerprint until contacts have names.
+    /// What it is called: the alias, else the name they gave, else the
+    /// fingerprint.
     pub name: String,
+    /// The name this wallet gave it.
+    pub alias: Option<String>,
+    /// The name they gave themselves.
+    pub their_name: Option<String>,
+    /// A short fingerprint of the DID the relationship was opened with.
+    pub fingerprint: String,
     /// Waiting for the counterparty's first answer.
     pub pending: bool,
     pub since: u64,
+    pub unread: u32,
+    pub last: Option<Last>,
 }
 
 impl From<&Relationship> for Contact {
     fn from(relationship: &Relationship) -> Self {
+        let fingerprint = contacts::name(&relationship.origin);
         Self {
-            id: contacts::name(&relationship.ours),
-            name: contacts::name(&relationship.origin),
+            id: conversation::id(&relationship.ours),
+            name: relationship
+                .alias
+                .clone()
+                .or_else(|| relationship.name.clone())
+                .unwrap_or_else(|| fingerprint.clone()),
+            alias: relationship.alias.clone(),
+            their_name: relationship.name.clone(),
+            fingerprint,
             pending: relationship.pending,
             since: relationship.since,
+            unread: relationship.unread,
+            last: relationship.last.clone(),
         }
     }
+}
+
+/// A conversation as the interface shows it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Conversation {
+    pub contact: Contact,
+    /// Oldest first.
+    pub entries: Vec<Entry>,
+}
+
+/// The name this wallet goes by.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile {
+    pub name: Option<String>,
+    /// Contacts a changed name could not be sent to.
+    pub unreached: usize,
 }
 
 /// The wallet's own invitation.
@@ -158,10 +221,11 @@ pub struct Shown {
 }
 
 /// What a sync came to.
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Synced {
-    /// Relationships opened or confirmed by what arrived.
+    /// Relationships opened, confirmed or renamed, and messages, by what
+    /// arrived.
     pub changed: usize,
     pub contacts: Vec<Contact>,
 }
@@ -229,17 +293,64 @@ pub async fn mediator_disconnect<R: Runtime>(
     if let Some(mediation) = &state.mediation {
         if let Ok(mediator) = Mediator::resolve(&mediation.mediator).await {
             if let Ok(inbox) = Peer::inbox(&seed, &mediator.did) {
+                let _ = push::register(&mediator, &inbox, None).await;
                 let _ = mediator.recipient(&inbox, &inbox, "remove").await;
             }
         }
     }
+    push::forget(&app);
 
     state.mediation = None;
     state::write(&app, &seed, &state)?;
     Ok(MediatorStatus::from(None))
 }
 
-/// The relationships this wallet has, newest first. Reads the device only.
+/// Registers this device's push token with the mediation, asking for
+/// permission to notify the first time. Returns whether the mediator will now
+/// notify it: not on desktop, not without a mediation, not when permission was
+/// refused, and not with a mediator that does not push for this platform.
+#[tauri::command]
+pub async fn push_register<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+) -> Result<bool, MessagingError> {
+    let seed = seed(&held)?;
+    let Some(mediation) = state::read(&app, &seed)?.mediation else {
+        return Ok(false);
+    };
+    let Some(token) = push::token(&app).await else {
+        return Ok(false);
+    };
+    let mediator = Mediator::resolve(&mediation.mediator).await?;
+    let inbox = Peer::inbox(&seed, &mediator.did)?;
+    mediator.ensure(&inbox, None).await?;
+    match push::register(&mediator, &inbox, Some(&token)).await {
+        Ok(()) => Ok(true),
+        Err(MessagingError::MediatorRefused) => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+/// Takes this device off the mediation's pushes, as far as the mediator can be
+/// reached, and tells the system no more are wanted. For signing out: an
+/// identity that has left the device must not keep waking it.
+#[tauri::command]
+pub async fn push_unregister<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+) -> Result<(), MessagingError> {
+    let seed = seed(&held)?;
+    if let Some(mediation) = state::read(&app, &seed)?.mediation {
+        let mediator = Mediator::resolve(&mediation.mediator).await?;
+        let inbox = Peer::inbox(&seed, &mediator.did)?;
+        let _ = push::register(&mediator, &inbox, None).await;
+    }
+    push::forget(&app);
+    Ok(())
+}
+
+/// The relationships this wallet has, the latest activity first. Reads the
+/// device only.
 #[tauri::command]
 pub fn contacts_list<R: Runtime>(
     app: tauri::AppHandle<R>,
@@ -263,6 +374,20 @@ pub async fn invitation_show<R: Runtime>(
     Ok(Shown {
         url: invitation(&seed, &mediation.mediator).await?,
     })
+}
+
+/// What a link or a scanned code is, as far as this wallet can tell without
+/// acting on it: somebody's invitation, a mediator's, or neither. Nothing is
+/// opened or sent; the screen it leads to asks first.
+#[tauri::command]
+pub fn invitation_kind(input: String) -> &'static str {
+    if contacts::read(&input).is_ok() {
+        "contact"
+    } else if mediator::target(&input).is_ok_and(|target| target.invitation.is_some()) {
+        "mediator"
+    } else {
+        "unknown"
+    }
 }
 
 /// Accepts somebody's invitation, and writes down the relationship it opens.
@@ -296,10 +421,8 @@ pub async fn messages_sync<R: Runtime>(
 
     let _guard = gate.0.lock().await;
     let mut state = state::read(&app, &seed)?;
-    let changed = sync(&seed, &mut state).await?;
-    if changed > 0 {
-        state::write(&app, &seed, &state)?;
-    }
+    let outcome = sync(&seed, &mut state).await?;
+    let changed = apply(&app, &seed, &mut state, outcome)?;
 
     Ok(Synced {
         changed,
@@ -307,15 +430,189 @@ pub async fn messages_sync<R: Runtime>(
     })
 }
 
-/// Registers the lock the commands that change the state hold.
+/// A conversation and what was said in it. Reads the device only.
+#[tauri::command]
+pub fn conversation_read<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    id: String,
+) -> Result<Conversation, MessagingError> {
+    let seed = seed(&held)?;
+    let state = state::read(&app, &seed)?;
+    let relationship = find(&state.relationships, &id)?;
+    Ok(Conversation {
+        contact: Contact::from(relationship),
+        entries: conversation::read(&app, &seed, &id)?,
+    })
+}
+
+/// Marks a conversation as read.
+#[tauri::command]
+pub async fn conversation_seen<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+    id: String,
+) -> Result<(), MessagingError> {
+    let seed = seed(&held)?;
+    let _guard = gate.0.lock().await;
+    let mut state = state::read(&app, &seed)?;
+    let relationship = find_mut(&mut state.relationships, &id)?;
+    if relationship.unread > 0 {
+        relationship.unread = 0;
+        state::write(&app, &seed, &state)?;
+    }
+    Ok(())
+}
+
+/// Sends `content` in the conversation `id`. What the other side's mediator
+/// did not take is kept, marked failed, to be retried.
+#[tauri::command]
+pub async fn message_send<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+    id: String,
+    content: String,
+) -> Result<Entry, MessagingError> {
+    let seed = seed(&held)?;
+    let content = content.trim();
+    if content.is_empty() || content.chars().count() > chat::TEXT_CHARS {
+        return Err(MessagingError::MessageInvalid);
+    }
+
+    let _guard = gate.0.lock().await;
+    let mut state = state::read(&app, &seed)?;
+    let message = chat::text(content);
+    let entry = Entry {
+        id: message.id.clone(),
+        mine: true,
+        content: content.to_owned(),
+        at: message
+            .created_time
+            .unwrap_or_else(almena_didcomm::message::now),
+        failed: false,
+    };
+    written(&app, &seed, &mut state, &id, entry, message).await
+}
+
+/// Sends again a message of this wallet's that failed, under the same `id`, so
+/// a copy that did arrive after all is recognised as one.
+#[tauri::command]
+pub async fn message_retry<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+    id: String,
+    message: String,
+) -> Result<Entry, MessagingError> {
+    let seed = seed(&held)?;
+
+    let _guard = gate.0.lock().await;
+    let mut state = state::read(&app, &seed)?;
+    let entry = conversation::read(&app, &seed, &id)?
+        .into_iter()
+        .find(|e| e.id == message && e.mine)
+        .ok_or(MessagingError::ContactUnknown)?;
+    let mut again = chat::text(&entry.content);
+    again.id = entry.id.clone();
+    again.created_time = Some(entry.at);
+    written(&app, &seed, &mut state, &id, entry, again).await
+}
+
+/// Gives a contact a name of this wallet's own, or takes it away.
+#[tauri::command]
+pub async fn contact_rename<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+    id: String,
+    alias: Option<String>,
+) -> Result<Contact, MessagingError> {
+    let seed = seed(&held)?;
+    let _guard = gate.0.lock().await;
+    let mut state = state::read(&app, &seed)?;
+    let relationship = find_mut(&mut state.relationships, &id)?;
+    relationship.alias = alias.as_deref().and_then(chat::clean);
+    let contact = Contact::from(&*relationship);
+    state::write(&app, &seed, &state)?;
+    Ok(contact)
+}
+
+/// The picture this wallet shows for its own identity, as a `data:` URL, when
+/// there is one. Reads the device only.
+#[tauri::command]
+pub fn profile_photo_read<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+) -> Result<Option<String>, MessagingError> {
+    let seed = seed(&held)?;
+    photo::read(&app, &seed)
+}
+
+/// Keeps a new picture — a JPEG `data:` URL the interface made small — or
+/// removes it with `None`. It stays on this device.
+#[tauri::command]
+pub fn profile_photo_write<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    photo: Option<String>,
+) -> Result<(), MessagingError> {
+    let seed = seed(&held)?;
+    photo::write(&app, &seed, photo.as_deref())
+}
+
+/// The name this wallet goes by. Reads the device only.
+#[tauri::command]
+pub fn profile_read<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+) -> Result<Profile, MessagingError> {
+    let seed = seed(&held)?;
+    Ok(Profile {
+        name: state::read(&app, &seed)?.profile,
+        unreached: 0,
+    })
+}
+
+/// Changes the name this wallet goes by, and sends it to every contact.
+#[tauri::command]
+pub async fn profile_write<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+    name: Option<String>,
+) -> Result<Profile, MessagingError> {
+    let seed = seed(&held)?;
+    let _guard = gate.0.lock().await;
+    let mut state = state::read(&app, &seed)?;
+    let name = name.as_deref().and_then(chat::clean);
+    if name == state.profile {
+        return Ok(Profile { name, unreached: 0 });
+    }
+    state.profile = name.clone();
+    state::write(&app, &seed, &state)?;
+
+    let unreached = announce(&seed, &state).await;
+    Ok(Profile { name, unreached })
+}
+
+/// Registers the lock the commands that change the state hold, and the live
+/// session.
 pub fn manage<R: Runtime>(app: &tauri::AppHandle<R>) {
     app.manage(Gate::default());
+    app.manage(live::Live::default());
 }
 
 /// Forgets everything messaging wrote down. Called when the identity leaves the
 /// device, by signing out or by running out of PIN attempts.
 pub fn clear<R: Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(live) = app.try_state::<live::Live>() {
+        live.stop();
+    }
     state::clear(app);
+    conversation::clear(app);
+    photo::clear(app);
 }
 
 /// Asks for mediation from the mediator `input` names and registers the inbox
@@ -388,13 +685,28 @@ async fn accept(
     Ok(relationship)
 }
 
+/// A message of text that arrived, for the relationship this wallet is `ours`
+/// in.
+struct Arrival {
+    ours: String,
+    entry: Entry,
+}
+
+/// What a sync came to, before the conversations are written.
+#[derive(Default)]
+struct Outcome {
+    /// Relationships opened, confirmed or renamed.
+    changed: usize,
+    arrivals: Vec<Arrival>,
+}
+
 /// Picks up and handles what is waiting: the protocol half of
-/// [`messages_sync`]. Returns how many relationships it opened or confirmed.
+/// [`messages_sync`]. Relationships are changed in `state`; the texts that
+/// arrived are returned, for the caller to write into their conversations.
 ///
-/// A message this version does not handle is left queued, so a later version
-/// can; one that cannot be opened at all is acknowledged, because it never will
-/// be.
-async fn sync(seed: &[u8; 64], state: &mut state::State) -> Result<usize, MessagingError> {
+/// When the mediator stops answering after the first round, what was taken
+/// so far is returned and the rest waits for the next sync.
+async fn sync(seed: &[u8; 64], state: &mut state::State) -> Result<Outcome, MessagingError> {
     let mediation = state
         .mediation
         .clone()
@@ -404,91 +716,337 @@ async fn sync(seed: &[u8; 64], state: &mut state::State) -> Result<usize, Messag
     let card = Peer::card(seed, &mediator.did)?;
     mediator.ensure(&inbox, None).await?;
 
-    let mut changed = 0;
-    for _ in 0..SYNC_ROUNDS {
-        let deliveries = mediator.deliveries(&inbox).await?;
+    let mut outcome = Outcome::default();
+    for round in 0..SYNC_ROUNDS {
+        let deliveries = match mediator.deliveries(&inbox).await {
+            Ok(deliveries) => deliveries,
+            Err(_) if round > 0 => break,
+            Err(error) => return Err(error),
+        };
         if deliveries.is_empty() {
             break;
         }
 
-        // Every DID a message can be for: the card and each pairwise, derived
-        // again rather than kept.
-        let mut secrets = InMemorySecrets::new();
-        inbox.add_to(&mut secrets);
-        card.add_to(&mut secrets);
-        for relationship in &state.relationships {
-            Peer::pairwise(seed, &mediator.did, &relationship.origin)?.add_to(&mut secrets);
-        }
-
-        let mut received = Vec::new();
-        for (id, envelope) in deliveries {
-            let Ok((message, metadata)) = unpack(&envelope, mediator.resolver(), &secrets).await
-            else {
-                received.push(id);
-                continue;
-            };
-            if !metadata.authenticated {
-                received.push(id);
-                continue;
-            }
-            let to = message.to.clone().unwrap_or_default();
-
-            match message.type_.as_str() {
-                contacts::PING if to.contains(&card.did) => {
-                    // A sender that cannot be answered now is left queued and
-                    // tried again on the next sync, without holding up the rest.
-                    if let Ok(relationship) = contacts::welcome(
-                        seed,
-                        &mediator,
-                        &inbox,
-                        &card,
-                        &message,
-                        &state.relationships,
-                    )
-                    .await
-                    {
-                        upsert(&mut state.relationships, relationship);
-                        changed += 1;
-                        received.push(id);
-                    }
-                }
-                contacts::PING_RESPONSE => {
-                    if let Some(relationship) = state
-                        .relationships
-                        .iter_mut()
-                        .find(|r| to.contains(&r.ours))
-                    {
-                        // The rotation the invitation's card signed: the
-                        // conversation moves to the pairwise that sent this.
-                        if let Some(rotation) = &metadata.from_prior {
-                            if rotation.iss == relationship.theirs
-                                && message.from.as_deref() == Some(rotation.sub.as_str())
-                            {
-                                relationship.theirs = rotation.sub.clone();
-                            }
-                        }
-                        if relationship.pending
-                            && message.from.as_deref() == Some(relationship.theirs.as_str())
-                        {
-                            relationship.pending = false;
-                            changed += 1;
-                        }
-                    }
-                    received.push(id);
-                }
-                _ => {}
-            }
-        }
+        let received = handle(
+            seed,
+            state,
+            &mediator,
+            &inbox,
+            &card,
+            deliveries,
+            &mut outcome,
+        )
+        .await?;
 
         // Nothing taken this round means what is left is for a later version;
         // asking again would only bring the same messages back.
         if received.is_empty() {
             break;
         }
-        mediator.acknowledge(&inbox, &received).await?;
+        // Not acknowledged is delivered again, and recognised then by its id.
+        if mediator.acknowledge(&inbox, &received).await.is_err() {
+            break;
+        }
     }
 
-    Ok(changed)
+    Ok(outcome)
+}
+
+/// Handles one batch of `(queue id, envelope)` pairs — from a `delivery`,
+/// asked for or pushed live — into `state` and `outcome`, and returns the ids
+/// to acknowledge.
+///
+/// A message this version does not handle is left queued, so a later version
+/// can; one that cannot be opened at all is acknowledged, because it never will
+/// be.
+async fn handle(
+    seed: &[u8; 64],
+    state: &mut state::State,
+    mediator: &Mediator,
+    inbox: &Peer,
+    card: &Peer,
+    deliveries: Vec<(String, String)>,
+    outcome: &mut Outcome,
+) -> Result<Vec<String>, MessagingError> {
+    // Every DID a message can be for: the card and each pairwise, derived
+    // again rather than kept.
+    let mut secrets = InMemorySecrets::new();
+    inbox.add_to(&mut secrets);
+    card.add_to(&mut secrets);
+    for relationship in &state.relationships {
+        Peer::pairwise(seed, &mediator.did, &relationship.origin)?.add_to(&mut secrets);
+    }
+
+    let mut received = Vec::new();
+    for (id, envelope) in deliveries {
+        let Ok((message, metadata)) = unpack(&envelope, mediator.resolver(), &secrets).await else {
+            received.push(id);
+            continue;
+        };
+        if !metadata.authenticated {
+            received.push(id);
+            continue;
+        }
+        let to = message.to.clone().unwrap_or_default();
+
+        match message.type_.as_str() {
+            contacts::PING if to.contains(&card.did) => {
+                // A sender that cannot be answered now is left queued and
+                // tried again on the next sync, without holding up the rest.
+                if let Ok(relationship) = contacts::welcome(
+                    seed,
+                    mediator,
+                    inbox,
+                    card,
+                    &message,
+                    &state.relationships,
+                    state.profile.as_deref(),
+                )
+                .await
+                {
+                    upsert(&mut state.relationships, relationship);
+                    outcome.changed += 1;
+                    received.push(id);
+                }
+            }
+            contacts::PING_RESPONSE => {
+                if let Some(relationship) = state
+                    .relationships
+                    .iter_mut()
+                    .find(|r| to.contains(&r.ours))
+                {
+                    // The rotation the invitation's card signed: the
+                    // conversation moves to the pairwise that sent this.
+                    if let Some(rotation) = &metadata.from_prior {
+                        if rotation.iss == relationship.theirs
+                            && message.from.as_deref() == Some(rotation.sub.as_str())
+                        {
+                            relationship.theirs = rotation.sub.clone();
+                        }
+                    }
+                    if relationship.pending
+                        && message.from.as_deref() == Some(relationship.theirs.as_str())
+                    {
+                        relationship.pending = false;
+                        outcome.changed += 1;
+                    }
+                }
+                received.push(id);
+            }
+            chat::TEXT | chat::PROFILE => {
+                let Some(relationship) = state
+                    .relationships
+                    .iter_mut()
+                    .find(|r| to.contains(&r.ours))
+                else {
+                    received.push(id);
+                    continue;
+                };
+                // Until the rotation in their ping-response is read, their
+                // pairwise is not known; a message that overtook it is
+                // left for the round after.
+                if message.from.as_deref() != Some(relationship.theirs.as_str()) {
+                    continue;
+                }
+
+                if message.type_ == chat::TEXT {
+                    if let Some(content) = chat::read_text(&message) {
+                        outcome.arrivals.push(Arrival {
+                            ours: relationship.ours.clone(),
+                            entry: Entry {
+                                id: message.id.clone(),
+                                mine: false,
+                                content,
+                                at: message
+                                    .created_time
+                                    .unwrap_or_else(almena_didcomm::message::now),
+                                failed: false,
+                            },
+                        });
+                    }
+                } else {
+                    if let Some(name) = chat::read_profile(&message) {
+                        if relationship.name != name {
+                            relationship.name = name;
+                            outcome.changed += 1;
+                        }
+                    }
+                    if chat::wants_ours(&message) {
+                        // Not sent back is not worth holding the rest up
+                        // for: the next change of name reaches them.
+                        if let Ok(pairwise) =
+                            Peer::pairwise(seed, &mediator.did, &relationship.origin)
+                        {
+                            let _ = chat::send_profile(
+                                mediator,
+                                &pairwise,
+                                &relationship.theirs,
+                                state.profile.as_deref(),
+                                false,
+                            )
+                            .await;
+                        }
+                    }
+                }
+                received.push(id);
+            }
+            _ => {}
+        }
+    }
+
+    Ok(received)
+}
+
+/// Writes what `outcome` brought into the conversations, counts it into their
+/// relationships, and writes the state when anything changed. Returns how much
+/// did.
+///
+/// What arrived is already acknowledged, so a conversation that cannot be
+/// written to does not stop the rest, nor the state, from being written.
+fn apply<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    seed: &[u8; 64],
+    state: &mut state::State,
+    outcome: Outcome,
+) -> Result<usize, MessagingError> {
+    let mut changed = outcome.changed;
+    let mut failure = None;
+    for arrival in outcome.arrivals {
+        let Some(relationship) = state
+            .relationships
+            .iter_mut()
+            .find(|r| r.ours == arrival.ours)
+        else {
+            continue;
+        };
+        let last = Last {
+            content: arrival.entry.content.clone(),
+            at: arrival.entry.at,
+            mine: false,
+        };
+        match conversation::put(
+            app,
+            seed,
+            &conversation::id(&relationship.ours),
+            arrival.entry,
+        ) {
+            Ok(true) => {
+                relationship.unread += 1;
+                if relationship.last.as_ref().is_none_or(|l| l.at <= last.at) {
+                    relationship.last = Some(last);
+                }
+                changed += 1;
+            }
+            Ok(false) => {}
+            Err(error) => failure = Some(error),
+        }
+    }
+    if changed > 0 {
+        state::write(app, seed, state)?;
+    }
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(changed),
+    }
+}
+
+/// Sends `message`, which `entry` records, in the conversation `id`, and writes
+/// down the entry and the conversation's latest message whether it went or
+/// not.
+async fn written<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    seed: &[u8; 64],
+    state: &mut state::State,
+    id: &str,
+    mut entry: Entry,
+    message: Message,
+) -> Result<Entry, MessagingError> {
+    let mediation = state
+        .mediation
+        .clone()
+        .ok_or(MessagingError::NotConnected)?;
+    let relationship = find_mut(&mut state.relationships, id)?;
+    if relationship.pending {
+        return Err(MessagingError::Pending);
+    }
+
+    entry.failed = deliver(seed, &mediation, relationship, message)
+        .await
+        .is_err();
+    conversation::put(app, seed, id, entry.clone())?;
+    if relationship.last.as_ref().is_none_or(|l| l.at <= entry.at) {
+        relationship.last = Some(Last {
+            content: entry.content.clone(),
+            at: entry.at,
+            mine: true,
+        });
+    }
+    state::write(app, seed, state)?;
+    Ok(entry)
+}
+
+/// Sends `message` to the counterparty of `relationship`, from its pairwise.
+async fn deliver(
+    seed: &[u8; 64],
+    mediation: &Mediation,
+    relationship: &Relationship,
+    message: Message,
+) -> Result<(), MessagingError> {
+    let mediator = Mediator::resolve(&mediation.mediator).await?;
+    let from = Peer::pairwise(seed, &mediator.did, &relationship.origin)?;
+    contacts::send(&mediator, &from, &relationship.theirs, message).await
+}
+
+/// Sends this wallet's name to every contact that has answered. Returns how
+/// many it could not be sent to.
+async fn announce(seed: &[u8; 64], state: &state::State) -> usize {
+    let open: Vec<&Relationship> = state.relationships.iter().filter(|r| !r.pending).collect();
+    let Some(mediation) = &state.mediation else {
+        return open.len();
+    };
+    let Ok(mediator) = Mediator::resolve(&mediation.mediator).await else {
+        return open.len();
+    };
+
+    let mut unreached = 0;
+    for relationship in open {
+        let sent = match Peer::pairwise(seed, &mediator.did, &relationship.origin) {
+            Ok(from) => chat::send_profile(
+                &mediator,
+                &from,
+                &relationship.theirs,
+                state.profile.as_deref(),
+                false,
+            )
+            .await
+            .is_ok(),
+            Err(_) => false,
+        };
+        if !sent {
+            unreached += 1;
+        }
+    }
+    unreached
+}
+
+fn find<'a>(
+    relationships: &'a [Relationship],
+    id: &str,
+) -> Result<&'a Relationship, MessagingError> {
+    relationships
+        .iter()
+        .find(|r| conversation::id(&r.ours) == id)
+        .ok_or(MessagingError::ContactUnknown)
+}
+
+fn find_mut<'a>(
+    relationships: &'a mut [Relationship],
+    id: &str,
+) -> Result<&'a mut Relationship, MessagingError> {
+    relationships
+        .iter_mut()
+        .find(|r| conversation::id(&r.ours) == id)
+        .ok_or(MessagingError::ContactUnknown)
 }
 
 /// Replaces the relationship opened with the same DID, or adds it.
@@ -502,9 +1060,17 @@ fn upsert(relationships: &mut Vec<Relationship>, relationship: Relationship) {
     }
 }
 
+/// The relationships, the one with the latest activity first.
 fn listed(relationships: &[Relationship]) -> Vec<Contact> {
     let mut contacts: Vec<Contact> = relationships.iter().map(Contact::from).collect();
-    contacts.sort_by_key(|contact| std::cmp::Reverse(contact.since));
+    contacts.sort_by_key(|contact| {
+        std::cmp::Reverse(
+            contact
+                .last
+                .as_ref()
+                .map_or(contact.since, |l| l.at.max(contact.since)),
+        )
+    });
     contacts
 }
 
@@ -522,6 +1088,31 @@ mod tests {
     /// `cargo test -- --ignored`.
     fn address() -> String {
         std::env::var("ALMENA_TEST_MEDIATOR").unwrap_or_else(|_| "http://localhost:8080".to_owned())
+    }
+
+    #[test]
+    fn a_link_is_told_apart_before_anything_is_done_with_it() {
+        let card = "did:peer:2.Vz6MkCard";
+        assert_eq!(invitation_kind(contacts::link(card)), "contact");
+        let mediator = format!(
+            "https://mediator.example.com/oob?_oob={}",
+            almena_didcomm::b64::encode(
+                json!({
+                    "type": "https://didcomm.org/out-of-band/2.0/invitation",
+                    "id": "x",
+                    "from": "did:web:mediator.example.com",
+                    "body": {"goal_code": "request-mediate"},
+                })
+                .to_string()
+            )
+        );
+        assert_eq!(invitation_kind(mediator), "mediator");
+        // An address is somewhere to connect to by hand, not an invitation.
+        assert_eq!(
+            invitation_kind("https://mediator.example.com".into()),
+            "unknown"
+        );
+        assert_eq!(invitation_kind("hello".into()), "unknown");
     }
 
     #[tokio::test]
@@ -550,10 +1141,12 @@ mod tests {
         let (alice_seed, bob_seed) = ([21u8; 64], [22u8; 64]);
         let mut alice = state::State {
             mediation: Some(mediate(&alice_seed, &address()).await.expect("alice")),
+            profile: Some("Alice".into()),
             relationships: Vec::new(),
         };
         let mut bob = state::State {
             mediation: Some(mediate(&bob_seed, &address()).await.expect("bob")),
+            profile: Some("Bob".into()),
             relationships: Vec::new(),
         };
         let mediator = alice.mediation.clone().expect("mediation").mediator;
@@ -566,8 +1159,18 @@ mod tests {
             .expect("accepted");
         assert!(accepted.pending);
 
-        assert_eq!(sync(&alice_seed, &mut alice).await.expect("alice syncs"), 1);
-        assert_eq!(sync(&bob_seed, &mut bob).await.expect("bob syncs"), 1);
+        assert_eq!(
+            sync(&alice_seed, &mut alice)
+                .await
+                .expect("alice syncs")
+                .changed,
+            1
+        );
+        // Bob reads the ping-response and Alice's name, and sends his back.
+        assert_eq!(
+            sync(&bob_seed, &mut bob).await.expect("bob syncs").changed,
+            2
+        );
 
         let (a, b) = (&alice.relationships[0], &bob.relationships[0]);
         assert!(!a.pending && !b.pending);
@@ -577,8 +1180,19 @@ mod tests {
         let card = Peer::card(&alice_seed, &mediator).expect("card").did;
         assert_ne!(b.theirs, card);
 
-        // Nothing is left behind, and a second sync changes nothing.
-        assert_eq!(sync(&alice_seed, &mut alice).await.expect("again"), 0);
+        assert_eq!(b.name.as_deref(), Some("Alice"));
+
+        // Alice reads Bob's name; then nothing is left behind, and another
+        // sync changes nothing.
+        assert_eq!(
+            sync(&alice_seed, &mut alice).await.expect("names").changed,
+            1
+        );
+        assert_eq!(alice.relationships[0].name.as_deref(), Some("Bob"));
+        assert_eq!(
+            sync(&alice_seed, &mut alice).await.expect("again").changed,
+            0
+        );
         assert_eq!(
             waiting(&bob_seed, &mediator)
                 .await
@@ -586,5 +1200,132 @@ mod tests {
                 .message_count,
             0
         );
+
+        // Text, both ways, each from the pairwise the other knows.
+        let mediation = alice.mediation.clone().expect("mediation");
+        deliver(
+            &alice_seed,
+            &mediation,
+            &alice.relationships[0],
+            chat::text("hola, Bob"),
+        )
+        .await
+        .expect("alice writes");
+        let arrived = sync(&bob_seed, &mut bob).await.expect("bob reads").arrivals;
+        assert_eq!(arrived.len(), 1);
+        assert_eq!(arrived[0].entry.content, "hola, Bob");
+        assert_eq!(arrived[0].ours, bob.relationships[0].ours);
+
+        let mediation = bob.mediation.clone().expect("mediation");
+        deliver(
+            &bob_seed,
+            &mediation,
+            &bob.relationships[0],
+            chat::text("hola, Alice"),
+        )
+        .await
+        .expect("bob writes");
+        let arrived = sync(&alice_seed, &mut alice)
+            .await
+            .expect("alice reads")
+            .arrivals;
+        assert_eq!(arrived.len(), 1);
+        assert!(!arrived[0].entry.mine);
+
+        // A retried message keeps its id, so the second copy is recognised.
+        let mut first = chat::text("twice");
+        let id = first.id.clone();
+        let mut second = chat::text("twice");
+        second.id = id.clone();
+        first.created_time = second.created_time;
+        for message in [first, second] {
+            deliver(
+                &alice_seed,
+                &mediation_of(&alice),
+                &alice.relationships[0],
+                message,
+            )
+            .await
+            .expect("sent");
+        }
+        let arrived = sync(&bob_seed, &mut bob).await.expect("bob reads").arrivals;
+        assert!(arrived.iter().all(|a| a.entry.id == id));
+    }
+
+    /// Bob goes live; what Alice sends then is pushed down his socket, and
+    /// once he acknowledges it nothing is left queued.
+    #[tokio::test]
+    #[ignore = "needs a mediator running"]
+    async fn a_live_socket_is_handed_what_is_sent() {
+        let (alice_seed, bob_seed) = ([31u8; 64], [32u8; 64]);
+        let (mut alice, mut bob) = (
+            state::State {
+                mediation: Some(mediate(&alice_seed, &address()).await.expect("alice")),
+                ..Default::default()
+            },
+            state::State {
+                mediation: Some(mediate(&bob_seed, &address()).await.expect("bob")),
+                ..Default::default()
+            },
+        );
+        let mediator = mediation_of(&alice).mediator;
+        let link = invitation(&alice_seed, &mediator)
+            .await
+            .expect("invitation");
+        accept(&bob_seed, &mut bob, &contacts::read(&link).expect("read"))
+            .await
+            .expect("accepted");
+        sync(&alice_seed, &mut alice).await.expect("alice syncs");
+        sync(&bob_seed, &mut bob).await.expect("bob syncs");
+        sync(&alice_seed, &mut alice).await.expect("alice again");
+
+        let resolved = Mediator::resolve(&mediator).await.expect("mediator");
+        assert!(resolved.socket.is_some());
+        let inbox = Peer::inbox(&bob_seed, &resolved.did).expect("inbox");
+        let card = Peer::card(&bob_seed, &resolved.did).expect("card");
+        let mut socket = live::Socket::open(&resolved, &inbox).await.expect("live");
+
+        deliver(
+            &alice_seed,
+            &mediation_of(&alice),
+            &alice.relationships[0],
+            chat::text("en directo"),
+        )
+        .await
+        .expect("alice writes");
+
+        let deliveries = socket.deliveries(&resolved, &inbox).await.expect("pushed");
+        let mut outcome = Outcome::default();
+        let received = handle(
+            &bob_seed,
+            &mut bob,
+            &resolved,
+            &inbox,
+            &card,
+            deliveries,
+            &mut outcome,
+        )
+        .await
+        .expect("handled");
+        assert_eq!(outcome.arrivals.len(), 1);
+        assert_eq!(outcome.arrivals[0].entry.content, "en directo");
+
+        socket
+            .acknowledge(&resolved, &inbox, &received)
+            .await
+            .expect("acknowledged");
+        // The acknowledgement is answered on the socket; by then it is done.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert_eq!(
+            waiting(&bob_seed, &mediator)
+                .await
+                .expect("status")
+                .message_count,
+            0
+        );
+    }
+
+    fn mediation_of(state: &state::State) -> Mediation {
+        state.mediation.clone().expect("mediation")
     }
 }

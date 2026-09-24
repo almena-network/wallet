@@ -19,7 +19,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `tray-icon` puts the wallet on a computer's bar, and `image-png` decodes the
+# glyph it shows there (`tray.rs`).
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -57,7 +59,25 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 webpki-roots = "1"
 async-trait = "0.1.92"
+# Live delivery: a WebSocket to the mediator while the wallet is in front, on
+# the same Rustls configuration as the HTTPS client (see `messaging::live`).
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tokio = { version = "1", features = ["time", "macros"] }
 tauri-plugin-clipboard-manager = "2"
+# Deep links: `almena://` — the scheme the wallet's own invitations are
+# written with — opens the wallet, on every platform (see `lib.rs`).
+tauri-plugin-deep-link = "2"
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+# The camera, for reading a code somebody is showing the wallet. Only a phone
+# or a tablet has one the wallet may drive; the plugin does not exist for the
+# desktops, and the tab that opens it is not offered there either.
+tauri-plugin-barcode-scanner = "2"
+# Push: the FCM or APNs device token the mediator notifies (`messaging::push`).
+# A release candidate, pinned exactly; `notify-rust` is its desktop half, which
+# the wallet does not use.
+tauri-plugin-notifications = { version = "=0.5.0-rc.14", default-features = false, features = ["push-notifications"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 # `protected` is the data protection keychain, the only one whose items can be
@@ -76,8 +96,19 @@ objc2-ui-kit = { version = "0.3", default-features = false, features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# The file keychain, which every build can reach, signed or not.
-apple-native-keyring-store = { version = "1", features = ["keychain"] }
+# **Both keychains, and each one for what only it can do.** The record lives in
+# the file keychain, which every build can reach — signed or not — so an
+# identity is never held hostage by how the copy of the wallet was built. The
+# device key lives in the data protection keychain, the only one on macOS whose
+# items the system itself holds behind Touch ID; it answers only to a signed
+# build, and where it does not, `vault::store` says so and the PIN is the only
+# way in.
+apple-native-keyring-store = { version = "1", features = ["keychain", "protected"] }
+# Whether this Mac can recognise its owner at all: without a sensor,
+# `require-user-presence` falls back to the login password, which is not the
+# lock the switch offering it names.
+objc2 = "0.6"
+objc2-local-authentication = { version = "0.3", features = ["LAContext"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-native-keyring-store = "1"
@@ -86,6 +117,13 @@ windows-native-keyring-store = "1"
 # The pure Rust D-Bus client: the alternative links libdbus and needs a C
 # toolchain for every target this is cross-compiled from.
 zbus-secret-service-keyring-store = "1"
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+# A computer runs one wallet: a second launch — or an `almena://` link opened
+# while it runs — goes to the one already open (`deep-link` forwards the URL).
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Where the window was left: its size, position and whether it was maximised.
+tauri-plugin-window-state = "2"
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

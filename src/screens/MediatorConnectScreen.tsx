@@ -11,6 +11,8 @@ import {
 } from "../mediator";
 
 type MediatorConnectScreenProps = {
+  /** A mediator's invitation already read — from a link or a code. */
+  initial?: string;
   onBack: () => void;
   onConnected: (status: MediatorStatus) => void;
 };
@@ -19,9 +21,13 @@ type MediatorConnectScreenProps = {
  * Choosing a mediator: its invitation link, its address or its DID. The one
  * offered is filled in, so connecting to it is one tap.
  */
-export function MediatorConnectScreen({ onBack, onConnected }: MediatorConnectScreenProps) {
+export function MediatorConnectScreen({
+  initial,
+  onBack,
+  onConnected,
+}: MediatorConnectScreenProps) {
   const t = useTranslations();
-  const [input, setInput] = useState(suggestedMediator);
+  const [input, setInput] = useState(initial ?? suggestedMediator);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

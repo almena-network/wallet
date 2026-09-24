@@ -24,6 +24,18 @@ export type VaultStatus = {
   problem: VaultErrorCode | null;
   /** How long the PIN is, so the keypad can be drawn before it is typed. */
   digits: number | null;
+  /** Whether the device is holding a key, and so whether a face opens this. */
+  deviceKey: boolean;
+  /**
+   * Whether this platform can offer opening with the device at all.
+   *
+   * Only where the system refuses to hand the key over until it has
+   * recognised somebody: iOS, and a signed macOS build on a Mac with a sensor.
+   * Windows and Linux give their items to whoever is logged in without asking,
+   * and Android has no store this side reaches yet, so a face button there
+   * would be a way in that asks for nothing.
+   */
+  deviceUnlock: boolean;
   /** Wrong PINs left before the record is destroyed. */
   attemptsLeft: number;
   /** Where the record is kept: the platform's secret store or a private file. */
@@ -37,6 +49,8 @@ export const emptyVault: VaultStatus = {
   exists: false,
   problem: null,
   digits: null,
+  deviceKey: false,
+  deviceUnlock: false,
   attemptsLeft: 10,
   home: null,
   version: null,
@@ -56,6 +70,26 @@ export function openVault(pin: string): Promise<Identity> {
   return invoke<Identity>("vault_open", { pin });
 }
 
+/**
+ * Opens it with the key the device is holding.
+ *
+ * On iOS the prompt this raises is the system's own: the key is stored so that
+ * it is not handed over until somebody has been recognised, so there is no
+ * separate question to ask first.
+ */
+export function openVaultWithDevice(): Promise<Identity> {
+  return invoke<Identity>("vault_open_with_device");
+}
+
+export function changeVaultPin(current: string, next: string): Promise<VaultStatus> {
+  return invoke<VaultStatus>("vault_change_pin", { current, next });
+}
+
+/** Arms or disarms opening with the device. Arming needs the PIN. */
+export function setVaultDevice(enabled: boolean, pin?: string): Promise<VaultStatus> {
+  return invoke<VaultStatus>("vault_set_device", { enabled, pin: pin ?? null });
+}
+
 /** Takes the identity off the device. The phrase is what is left. */
 export function destroyVault(): Promise<VaultStatus> {
   return invoke<VaultStatus>("vault_destroy");
@@ -73,6 +107,9 @@ export type VaultErrorCode =
   | "vault_pin_length"
   | "vault_pin_not_digits"
   | "vault_no_identity"
+  | "vault_no_device_key"
+  | "vault_device_unproven"
+  | "vault_no_device_store"
   | "vault_unreadable"
   | "vault_too_new"
   | "vault_storage"
@@ -87,6 +124,9 @@ const CODES: VaultErrorCode[] = [
   "vault_pin_length",
   "vault_pin_not_digits",
   "vault_no_identity",
+  "vault_no_device_key",
+  "vault_device_unproven",
+  "vault_no_device_store",
   "vault_unreadable",
   "vault_too_new",
   "vault_storage",

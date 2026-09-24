@@ -28,6 +28,10 @@
 			</array>
 		</dict>
 	</dict>
+	<!-- Why the camera is asked for, which iOS shows when it asks. The scanner
+	     reads a code and nothing else. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Almena Wallet uses the camera to read QR codes.</string>
 	<!-- Portrait on a phone; a tablet keeps every orientation. Declared here as
 	     well as in the generated project because `tauri ios init` regenerates
 	     that one and not this file. -->

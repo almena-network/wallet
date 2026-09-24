@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 
 import { ChevronLeftIcon } from "../../components/icons";
-import { fill, plural, useI18n } from "../../i18n";
+import { useI18n } from "../../i18n";
+import { fill, plural } from "../../i18n/format";
 
 type ConfirmPhraseScreenProps = {
   words: string[];

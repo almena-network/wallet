@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The words of the notification the mediator sends when something is
+     waiting. It sends these names, never the words: the phone says them in its
+     own language. The keys are the mediator's contract (its `push/mod.rs`). -->
+<resources>
+    <string name="almena_wake_title">New messages</string>
+    <string name="almena_wake_body">Open the wallet to read them.</string>
+    <!-- The channel FCM files these under, as Android's notification settings
+         show it. -->
+    <string name="fcm_fallback_notification_channel_label">Messages</string>
+</resources>

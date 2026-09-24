@@ -63,6 +63,10 @@ export type MessagingErrorCode =
   | "messaging_mediator_refused"
   | "messaging_counterparty_unreachable"
   | "messaging_not_connected"
+  | "messaging_pending"
+  | "messaging_contact_unknown"
+  | "messaging_message_invalid"
+  | "messaging_photo_invalid"
   | "messaging_keys"
   | "messaging_unreadable"
   | "messaging_storage"
@@ -78,6 +82,10 @@ const CODES: MessagingErrorCode[] = [
   "messaging_mediator_refused",
   "messaging_counterparty_unreachable",
   "messaging_not_connected",
+  "messaging_pending",
+  "messaging_contact_unknown",
+  "messaging_message_invalid",
+  "messaging_photo_invalid",
   "messaging_keys",
   "messaging_unreadable",
   "messaging_storage",
