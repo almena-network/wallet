@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { ChevronLeftIcon } from "../components/icons";
+import { ChevronLeftIcon, QrIcon } from "../components/icons";
 import { ProfileHeader } from "../components/ProfileHeader";
 import { useTranslations } from "../i18n";
 import { useMediation } from "../mediator";
@@ -11,6 +11,7 @@ import type { Theme } from "../theme";
 import type { Vault } from "../vault";
 import { PinChange } from "./PinChange";
 import { PinConfirm } from "./PinConfirm";
+import { InviteScreen } from "./InviteScreen";
 import { MediatorConnectScreen } from "./MediatorConnectScreen";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { MessagingSettings } from "./settings/MessagingSettings";
@@ -23,7 +24,7 @@ type Section = "profile" | "appearance" | "messaging" | "security";
 const SECTIONS: Section[] = ["profile", "appearance", "messaging", "security"];
 
 /** A screen a section sends somebody to, and comes back from. */
-type Aside = "connect" | "pin" | "device";
+type Aside = "connect" | "pin" | "device" | "invite";
 
 type ProfileScreenProps = {
   /** What the device is keeping, which the security section describes and changes. */
@@ -77,6 +78,11 @@ export function ProfileScreen({
   // Leaving the tab — a lock, say — must not leave the bar hidden behind it.
   useEffect(() => () => onKeypad(false), [onKeypad]);
 
+  // This wallet's invitation, as a code somebody in front of it scans to open a
+  // relationship — each of them answered from a pairwise of their own.
+  if (aside === "invite") {
+    return <InviteScreen onBack={back} />;
+  }
   if (aside === "connect") {
     return (
       <MediatorConnectScreen
@@ -161,6 +167,17 @@ export function ProfileScreen({
 
   return (
     <div className="screen">
+      <header className="screen__header screen__header--end">
+        <button
+          type="button"
+          className="icon-button"
+          onClick={() => setAside("invite")}
+          aria-label={t.profile.showCode}
+        >
+          <QrIcon />
+        </button>
+      </header>
+
       <ProfileHeader />
 
       <nav className="menu" aria-label={t.settings.title}>

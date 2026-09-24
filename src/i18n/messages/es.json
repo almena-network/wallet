@@ -21,7 +21,8 @@
     "changePhoto": "Cambiar foto",
     "removePhoto": "Quitar foto",
     "noName": "Aún sin nombre",
-    "photoUnreadable": "No se ha podido abrir esa imagen. Prueba con otra."
+    "photoUnreadable": "No se ha podido abrir esa imagen. Prueba con otra.",
+    "showCode": "Mostrar mi código de invitación"
   },
   "scan": {
     "title": "Escanear QR",

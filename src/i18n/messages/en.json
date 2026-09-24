@@ -21,7 +21,8 @@
     "changePhoto": "Change photo",
     "removePhoto": "Remove photo",
     "noName": "No name yet",
-    "photoUnreadable": "That picture could not be opened. Try another one."
+    "photoUnreadable": "That picture could not be opened. Try another one.",
+    "showCode": "Show my invitation code"
   },
   "scan": {
     "title": "Scan QR",

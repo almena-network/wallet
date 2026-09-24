@@ -292,6 +292,11 @@ body {
   gap: 12px;
 }
 
+/* A header with nothing but a button, which sits at the far end. */
+.screen__header--end {
+  justify-content: flex-end;
+}
+
 .screen__eyebrow {
   margin: 0;
   color: var(--text-muted);
