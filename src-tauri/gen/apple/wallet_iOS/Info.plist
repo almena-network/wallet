@@ -68,5 +68,7 @@
 			<string>almena</string>
 		</dict>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Almena Wallet uses Face ID to open without the PIN.</string>
 </dict>
 </plist>

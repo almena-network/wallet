@@ -22,8 +22,15 @@ export type VaultStatus = {
    * locked at the wrong moment.
    */
   problem: VaultErrorCode | null;
+  /**
+   * Whether digits open this at all. False on an iPhone with a passcode, where
+   * the phone's own lock — the face, then the passcode — is the only one.
+   */
+  pin: boolean;
   /** How long the PIN is, so the keypad can be drawn before it is typed. */
   digits: number | null;
+  /** Whether the device's own lock can be the wallet's, with no PIN: an iPhone. */
+  deviceLock: boolean;
   /** Whether the device is holding a key, and so whether a face opens this. */
   deviceKey: boolean;
   /**
@@ -48,7 +55,9 @@ export type VaultStatus = {
 export const emptyVault: VaultStatus = {
   exists: false,
   problem: null,
+  pin: false,
   digits: null,
+  deviceLock: false,
   deviceKey: false,
   deviceUnlock: false,
   attemptsLeft: 10,
@@ -60,9 +69,13 @@ export function readVault(): Promise<VaultStatus> {
   return invoke<VaultStatus>("vault_status");
 }
 
-/** Writes down the identity that is open, behind a PIN. */
-export function createVault(pin: string): Promise<VaultStatus> {
-  return invoke<VaultStatus>("vault_create", { pin });
+/**
+ * Writes down the identity that is open, behind a PIN — or, with none, behind
+ * the iPhone's own lock, which answers `vault_no_passcode` where the phone has
+ * no passcode to put it behind.
+ */
+export function createVault(pin?: string): Promise<VaultStatus> {
+  return invoke<VaultStatus>("vault_create", { pin: pin ?? null });
 }
 
 /** Opens it with the digits, and hands back the identity that was inside. */
@@ -110,6 +123,9 @@ export type VaultErrorCode =
   | "vault_no_device_key"
   | "vault_device_unproven"
   | "vault_no_device_store"
+  | "vault_device_refused"
+  | "vault_no_pin"
+  | "vault_no_passcode"
   | "vault_unreadable"
   | "vault_too_new"
   | "vault_storage"
@@ -127,6 +143,9 @@ const CODES: VaultErrorCode[] = [
   "vault_no_device_key",
   "vault_device_unproven",
   "vault_no_device_store",
+  "vault_device_refused",
+  "vault_no_pin",
+  "vault_no_passcode",
   "vault_unreadable",
   "vault_too_new",
   "vault_storage",

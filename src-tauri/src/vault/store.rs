@@ -52,11 +52,17 @@
 //!   on iOS: it is `kSecAccessControlUserPresence`, enforced by the system
 //!   rather than by a screen this wallet drew.
 //!
-//!   The two cannot be asked for together. `apple-native-keyring-store` maps
-//!   `require-user-presence` onto plain `kSecAttrAccessibleWhenUnlocked`, so the
-//!   device key — unlike the record — is in the backup class and could be
+//!   The store cannot ask for the two together. `apple-native-keyring-store`
+//!   maps `require-user-presence` onto plain `kSecAttrAccessibleWhenUnlocked`, so
+//!   a device key armed beside a PIN is in the backup class and could be
 //!   restored onto another phone. It opens nothing there: the record it would
 //!   open is the one that stayed behind.
+//!
+//!   **Where the iPhone's lock is the only one, the key is written here
+//!   instead** — [`set_device_lock`] — with both: the presence check and
+//!   `when-passcode-set-this-device-only`. Face ID first, the passcode after
+//!   it, never in a backup, and gone the moment the passcode is taken off the
+//!   phone, at which point the phrase is the way back.
 //!
 //! Reading looks in both places, because a wallet whose store stopped answering
 //! — a Linux session with no Secret Service running — must not conclude that
@@ -305,8 +311,68 @@ pub fn clear<R: Runtime>(app: &tauri::AppHandle<R>) {
 /// `require-user-presence`, so the system stops this call until somebody has
 /// been recognised. Elsewhere the prompt is the interface's to raise, and this
 /// only hands back what was stored.
-pub fn device_key() -> Option<Vec<u8>> {
-    device_entry().ok()?.get_secret().ok()
+///
+/// # Errors
+///
+/// [`VaultError::NoDeviceKey`] when nothing is there, and
+/// [`VaultError::DeviceRefused`] when something is and the system would not
+/// hand it over — a face not recognised, a prompt dismissed. The two are told
+/// apart because only the first means the key is gone.
+pub fn device_key() -> Result<Vec<u8>, VaultError> {
+    let entry = device_entry().map_err(|_| VaultError::NoDeviceKey)?;
+    match entry.get_secret() {
+        Ok(bytes) => Ok(bytes),
+        Err(keyring_core::Error::NoEntry) => Err(VaultError::NoDeviceKey),
+        Err(_) => Err(VaultError::DeviceRefused),
+    }
+}
+
+/// Whether the device's own lock can be the wallet's, with no PIN beside it.
+///
+/// An iPhone, and only an iPhone: whether it has a passcode is answered by
+/// [`set_device_lock`] trying, since the item it writes cannot exist without one.
+pub const fn device_lockable() -> bool {
+    cfg!(target_os = "ios")
+}
+
+/// Puts the data key where the iPhone's own lock is the only way to it.
+///
+/// `kSecAccessControlUserPresence` — Face ID or Touch ID first, the passcode
+/// when that fails — over `kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly`:
+/// never in a backup, never on another phone, and removed by the system if the
+/// passcode is. Whatever copy was there before goes first, because writing over
+/// an existing item changes its contents and keeps its old protection.
+///
+/// # Errors
+///
+/// [`VaultError::NoPasscode`] when the system will not take it, which on a phone
+/// the wallet runs on means there is no passcode to put it behind.
+#[cfg(target_os = "ios")]
+pub fn set_device_lock(key: &[u8]) -> Result<(), VaultError> {
+    use security_framework::access_control::{ProtectionMode, SecAccessControl};
+    use security_framework::passwords::{
+        set_generic_password_options, AccessControlOptions, PasswordOptions,
+    };
+
+    set_device_key(None)?;
+
+    let access = SecAccessControl::create_with_protection(
+        Some(ProtectionMode::AccessibleWhenPasscodeSetThisDeviceOnly),
+        AccessControlOptions::USER_PRESENCE.bits(),
+    )
+    .map_err(|_| VaultError::NoPasscode)?;
+
+    // The same service and account the store reads it back under.
+    let mut options = PasswordOptions::new_generic_password(SERVICE, DEVICE_KEY);
+    options.use_protected_keychain();
+    options.set_access_control(access);
+    set_generic_password_options(key, options).map_err(|_| VaultError::NoPasscode)
+}
+
+/// Nowhere but an iPhone: see [`device_lockable`].
+#[cfg(not(target_os = "ios"))]
+pub fn set_device_lock(_key: &[u8]) -> Result<(), VaultError> {
+    Err(VaultError::NoDeviceStore)
 }
 
 /// Puts the data key where the platform can hand it back, or takes it away.

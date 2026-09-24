@@ -113,7 +113,9 @@
       "autoLockMinutes": {
         "one": "{count} minute",
         "other": "{count} minutes"
-      }
+      },
+      "deviceLockLabel": "Opens with",
+      "deviceLockValue": "Face ID or the iPhone passcode"
     },
     "profile": {
       "title": "Your name",
@@ -239,12 +241,22 @@
       "vault_unknown": "That did not work. Try again.",
       "vault_no_device_key": "This device is not holding a key. Use your PIN.",
       "vault_device_unproven": "This device did not recognise you, so nothing has been turned on. Try again, or carry on with your PIN.",
-      "vault_no_device_store": "This device cannot keep a key of its own, so the PIN is the way in."
+      "vault_no_device_store": "This device cannot keep a key of its own, so the PIN is the way in.",
+      "vault_device_refused": "This device did not recognise you. Try again.",
+      "vault_no_pin": "This wallet opens with the device's own lock, not a PIN.",
+      "vault_no_passcode": "This iPhone has no passcode, so the wallet needs a PIN of its own."
     },
     "problem": {
       "title": "This device is holding an identity it cannot open",
       "body": "Nothing has been lost and nothing has been changed. Until this is answered the wallet will not offer to create a second identity over the one already here.",
       "retry": "Try again"
+    },
+    "deviceLock": {
+      "title": "Locked",
+      "subtitle": "Opens with Face ID or your iPhone passcode.",
+      "unlock": "Unlock",
+      "checking": "Waiting for your iPhone",
+      "keyGone": "This iPhone no longer holds the key: it goes when the passcode is turned off. Sign out and come back with your phrase."
     }
   },
   "logout": {

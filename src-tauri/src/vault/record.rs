@@ -7,6 +7,11 @@
 //! neither is the wallet, which is what lets a failed sensor not be the end of
 //! an identity and a forgotten PIN not be either.
 //!
+//! **Or once, on an iPhone with a passcode.** There the device's own lock — the
+//! face first, the passcode after it — is the only one, and the record carries
+//! no PIN wrap at all: the copy in the Keychain is the one way in. Version 2 is
+//! the version in which the PIN wrap may be missing.
+//!
 //! **The format carries its version and its own parameters.** A wallet installed
 //! over an older one has to read what that one wrote, so nothing here is implied
 //! by the code that reads it: the cost parameters, the salt and the nonces are
@@ -29,7 +34,10 @@ use super::{VaultError, LENGTHS};
 /// The version this wallet writes. A record numbered higher was written by a
 /// wallet that knows something this one does not, and is refused rather than
 /// guessed at.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
+
+/// The first version, in which every record had a PIN.
+const FIRST: u32 = 1;
 
 /// The only key derivation this version has a name for.
 const ARGON2ID: &str = "argon2id";
@@ -119,13 +127,18 @@ impl Kdf {
 pub struct Record {
     /// The format this record is in. Checked before anything else is believed.
     pub version: u32,
-    kdf: Kdf,
+    /// The cost the PIN was derived at. Absent with the PIN.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kdf: Option<Kdf>,
     /// The seed, under the data key.
     seed: Sealed,
-    /// The data key, under the key the PIN derives.
-    pin_wrap: Sealed,
+    /// The data key, under the key the PIN derives. Absent where the device's
+    /// own lock is the only one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pin_wrap: Option<Sealed>,
     /// How long the PIN is, so the keypad can be drawn before it is typed.
-    pub digits: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub digits: Option<u8>,
     /// Whether a copy of the data key was placed in the platform's secret store.
     pub device_wrap: bool,
     /// Wrong PINs since the last right one.
@@ -164,10 +177,10 @@ impl Record {
         Ok((
             Self {
                 version: VERSION,
-                kdf,
+                kdf: Some(kdf),
                 seed: sealed_seed,
-                pin_wrap,
-                digits,
+                pin_wrap: Some(pin_wrap),
+                digits: Some(digits),
                 device_wrap: false,
                 wrong: 0,
             },
@@ -175,15 +188,65 @@ impl Record {
         ))
     }
 
+    /// Seals a seed under a new data key and nothing else: the copy the device
+    /// keeps is the only way in.
+    ///
+    /// # Errors
+    ///
+    /// [`VaultError::Entropy`] when the system will not supply randomness.
+    pub fn seal_device(
+        seed: &[u8; SEED_BYTES],
+    ) -> Result<(Self, Zeroizing<[u8; KEY_BYTES]>), VaultError> {
+        let data_key = Zeroizing::new(random::<KEY_BYTES>()?);
+        let sealed_seed = seal_with(&data_key, seed, SEED_CONTEXT)?;
+
+        Ok((
+            Self {
+                version: VERSION,
+                kdf: None,
+                seed: sealed_seed,
+                pin_wrap: None,
+                digits: None,
+                device_wrap: true,
+                wrong: 0,
+            },
+            data_key,
+        ))
+    }
+
+    /// The same seed under the same data key, with the PIN wrap taken away.
+    ///
+    /// Only once the device is holding the key: after this nothing else opens it.
+    pub fn without_pin(&self) -> Self {
+        Self {
+            version: VERSION,
+            kdf: None,
+            seed: self.seed.clone(),
+            pin_wrap: None,
+            digits: None,
+            device_wrap: true,
+            wrong: 0,
+        }
+    }
+
+    /// Whether digits open this record at all.
+    pub const fn has_pin(&self) -> bool {
+        self.pin_wrap.is_some()
+    }
+
     /// The data key this PIN unwraps.
     ///
     /// # Errors
     ///
     /// [`VaultError::WrongPin`] when the digits do not open it, which is also
-    /// what a record somebody has edited answers.
+    /// what a record somebody has edited answers, and [`VaultError::NoPin`]
+    /// for a record that has no PIN.
     pub fn unwrap_pin(&self, pin: &str) -> Result<Zeroizing<[u8; KEY_BYTES]>, VaultError> {
-        let wrapping = derive(&self.kdf, pin)?;
-        let opened = open_with(&wrapping, &self.pin_wrap, &header(self.version, &self.kdf))
+        let (Some(kdf), Some(pin_wrap)) = (&self.kdf, &self.pin_wrap) else {
+            return Err(VaultError::NoPin);
+        };
+        let wrapping = derive(kdf, pin)?;
+        let opened = open_with(&wrapping, pin_wrap, &header(self.version, kdf))
             .ok_or(VaultError::WrongPin)?;
 
         key_from(&opened).ok_or(VaultError::Unreadable)
@@ -236,10 +299,10 @@ impl Record {
 
         Ok(Self {
             version: VERSION,
-            kdf,
+            kdf: Some(kdf),
             seed: self.seed.clone(),
-            pin_wrap,
-            digits,
+            pin_wrap: Some(pin_wrap),
+            digits: Some(digits),
             device_wrap: self.device_wrap,
             wrong: 0,
         })
@@ -260,16 +323,28 @@ impl Record {
         // Zero is not a version this wallet ever wrote. It is what a record
         // somebody assembled by hand looks like, and reading one as if it were
         // version one would mean trusting a header nothing here produced.
-        if record.version == 0 || record.kdf.algorithm != ARGON2ID {
+        if record.version == 0 {
             return Err(VaultError::Unreadable);
         }
-        // The keypad is drawn from this before anything is typed, so a record
-        // claiming a length this wallet does not offer would put a lock on
-        // screen that nobody can answer.
-        if !LENGTHS.contains(&record.digits) {
-            return Err(VaultError::Unreadable);
+
+        match (&record.kdf, &record.pin_wrap, record.digits) {
+            (Some(kdf), Some(_), Some(digits)) => {
+                if kdf.algorithm != ARGON2ID {
+                    return Err(VaultError::Unreadable);
+                }
+                // The keypad is drawn from this before anything is typed, so a
+                // record claiming a length this wallet does not offer would put
+                // a lock on screen that nobody can answer.
+                if !LENGTHS.contains(&digits) {
+                    return Err(VaultError::Unreadable);
+                }
+                kdf.affordable()?;
+            }
+            // No PIN, which only a second-version record may be, and only one
+            // the device holds a key to: otherwise nothing at all opens it.
+            (None, None, None) if record.version > FIRST && record.device_wrap => {}
+            _ => return Err(VaultError::Unreadable),
         }
-        record.kdf.affordable()?;
 
         Ok(record)
     }
@@ -399,7 +474,7 @@ mod tests {
 
         let key = read.unwrap_pin("1234").expect("the right PIN");
         assert_eq!(*read.seed(&key).expect("the seed"), SEED);
-        assert_eq!(read.digits, 4);
+        assert_eq!(read.digits, Some(4));
     }
 
     #[test]
@@ -438,7 +513,7 @@ mod tests {
 
         let reopened = changed.unwrap_pin("654321").expect("the new PIN");
         assert_eq!(*changed.seed(&reopened).expect("the seed"), SEED);
-        assert_eq!(changed.digits, 6);
+        assert_eq!(changed.digits, Some(6));
         // And the old one stops working, which is the whole of what changing it means.
         assert!(matches!(
             changed.unwrap_pin("1234"),
@@ -532,6 +607,69 @@ mod tests {
                 "nonce {replacement:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_record_the_device_alone_opens_survives_being_written_and_read_back() {
+        let (record, key) = Record::seal_device(&SEED).expect("entropy");
+        let read = Record::parse(&record.write()).expect("a record this version wrote");
+
+        assert!(!read.has_pin() && read.device_wrap && read.digits.is_none());
+        assert_eq!(*read.seed(&key).expect("the seed"), SEED);
+        // No digits open it, and none are counted against it.
+        assert!(matches!(read.unwrap_pin("1234"), Err(VaultError::NoPin)));
+    }
+
+    #[test]
+    fn taking_the_pin_away_leaves_the_identity_untouched() {
+        let (record, key) = sealed();
+        let bare = Record::parse(&record.without_pin().write()).expect("still a record");
+
+        assert!(!bare.has_pin() && bare.device_wrap);
+        assert_eq!(*bare.seed(&key).expect("the seed"), SEED);
+    }
+
+    #[test]
+    fn a_record_with_no_way_in_is_refused() {
+        // No PIN and no key on the device: nothing could ever open it.
+        let (record, _) = Record::seal_device(&SEED).expect("entropy");
+        let mut written: serde_json::Value = serde_json::from_slice(&record.write()).expect("json");
+        written["deviceWrap"] = serde_json::json!(false);
+        assert!(matches!(
+            Record::parse(&serde_json::to_vec(&written).expect("json")),
+            Err(VaultError::Unreadable)
+        ));
+
+        // And a first-version record never went without one.
+        written["deviceWrap"] = serde_json::json!(true);
+        written["version"] = serde_json::json!(FIRST);
+        assert!(matches!(
+            Record::parse(&serde_json::to_vec(&written).expect("json")),
+            Err(VaultError::Unreadable)
+        ));
+    }
+
+    #[test]
+    fn a_first_version_record_still_opens() {
+        // Sealed as the first version would have sealed it: the version is
+        // bound into the PIN wrap, so this is the version it has to be read at.
+        let (mut record, _) = sealed();
+        let kdf = record.kdf.clone().expect("a PIN record");
+        let (_, key) = sealed();
+        record.version = FIRST;
+        record.pin_wrap = Some(
+            seal_with(
+                &derive(&kdf, "1234").expect("derive"),
+                &*key,
+                &header(FIRST, &kdf),
+            )
+            .expect("seal"),
+        );
+        record.seed = seal_with(&key, &SEED, SEED_CONTEXT).expect("seal");
+
+        let read = Record::parse(&record.write()).expect("a first-version record");
+        let opened = read.unwrap_pin("1234").expect("the right PIN");
+        assert_eq!(*read.seed(&opened).expect("the seed"), SEED);
     }
 
     #[test]

@@ -49,43 +49,49 @@ export function SecuritySettings({
           {t.settings.security.lockTitle}
         </h2>
 
-        {/* The PIN cannot be turned off — it is one of the two things that open
-            the record — so it keeps the row and trades the switch for the arrow
-            that leads to where it is replaced. */}
-        <ChevronRow
-          icon={<KeypadIcon />}
-          label={t.settings.security.pinLabel}
-          hint={
-            status.digits
-              ? fill(t.settings.security.pinDigits, { digits: status.digits })
-              : undefined
-          }
-          onClick={onChangePin}
-        />
+        {/* Without a PIN the iPhone's lock is the only one, and there is nothing
+            here to change: it is the phone's, changed in the phone's settings. */}
+        {status.pin ? (
+          <>
+            {/* The PIN cannot be turned off — it is one of the two things that
+                open the record — so it keeps the row and trades the switch for
+                the arrow that leads to where it is replaced. */}
+            <ChevronRow
+              icon={<KeypadIcon />}
+              label={t.settings.security.pinLabel}
+              hint={
+                status.digits
+                  ? fill(t.settings.security.pinDigits, { digits: status.digits })
+                  : undefined
+              }
+              onClick={onChangePin}
+            />
 
-        <ToggleRow
-          icon={<BiometricIcon />}
-          label={t.settings.security.biometricsLabel}
-          hint={
-            // One answer for every way this can be off — no sensor on this Mac,
-            // a build the system will not give a protected keychain to, a
-            // platform whose store would hand the key to anybody. They are the
-            // same fact to the person reading the row: this device will not do
-            // it. Which of the three it is belongs in the log, not here.
-            status.deviceUnlock ? undefined : t.settings.security.biometricsUnavailable
-          }
-          on={status.deviceKey}
-          disabled={!status.deviceUnlock}
-          // Arming hands the platform a key, so it costs the PIN and happens on
-          // a screen of its own. Disarming only takes one away.
-          onChange={(on) => {
-            if (on) {
-              onArmDevice();
-            } else {
-              void disarm();
-            }
-          }}
-        />
+            <ToggleRow
+              icon={<BiometricIcon />}
+              label={t.settings.security.biometricsLabel}
+              hint={
+                // One answer for every way this can be off — no sensor on this Mac,
+                // a build the system will not give a protected keychain to, a
+                // platform whose store would hand the key to anybody. They are the
+                // same fact to the person reading the row: this device will not do
+                // it. Which of the three it is belongs in the log, not here.
+                status.deviceUnlock ? undefined : t.settings.security.biometricsUnavailable
+              }
+              on={status.deviceKey}
+              disabled={!status.deviceUnlock}
+              // Arming hands the platform a key, so it costs the PIN and happens on
+              // a screen of its own. Disarming only takes one away.
+              onChange={(on) => {
+                if (on) {
+                  onArmDevice();
+                } else {
+                  void disarm();
+                }
+              }}
+            />
+          </>
+        ) : null}
 
         {/* The one length there is: the wallet lets go this long after the last
             thing somebody did with it, on the screen or off it — see `useIdle`.
@@ -111,6 +117,12 @@ export function SecuritySettings({
         </div>
 
         <dl className="detail-list">
+          {status.pin ? null : (
+            <div className="detail-list__row">
+              <dt>{t.settings.security.deviceLockLabel}</dt>
+              <dd>{t.settings.security.deviceLockValue}</dd>
+            </div>
+          )}
           <div className="detail-list__row">
             <dt>{t.settings.security.keptLabel}</dt>
             <dd>

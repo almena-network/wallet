@@ -83,6 +83,11 @@ tauri-plugin-notifications = { version = "=0.5.0-rc.14", default-features = fals
 # `protected` is the data protection keychain, the only one whose items can be
 # kept to this device alone.
 apple-native-keyring-store = { version = "1", features = ["protected"] }
+# The device key when the iPhone's own lock is the wallet's: written here
+# rather than through the store above, which cannot ask for the user-presence
+# check and "this device only" together — see `vault::store::set_device_lock`.
+# The same version the store already brings in.
+security-framework = "3"
 # Turning down the second window an iPad offers — see `scene.rs`. The same
 # `objc2-ui-kit` Tauri itself is built on, with only the pieces that ask the
 # application to destroy a scene session.

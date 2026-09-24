@@ -24,6 +24,7 @@ import {
   useVault,
 } from "./vault";
 import { AcceptInvitationScreen } from "./screens/AcceptInvitationScreen";
+import { DeviceLockScreen } from "./screens/DeviceLockScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LogoutScreen } from "./screens/LogoutScreen";
 import { MediatorConnectScreen } from "./screens/MediatorConnectScreen";
@@ -132,7 +133,14 @@ export default function App() {
       try {
         setIdentity(await open());
       } catch (failure) {
-        setUnlockError(t.vault.errors[vaultErrorCode(failure)]);
+        const code = vaultErrorCode(failure);
+        // Without a PIN, a missing key is not "use your PIN": it is the passcode
+        // having been taken off the phone, and the phrase is what is left.
+        setUnlockError(
+          code === "vault_no_device_key" && !vault.status.pin
+            ? t.vault.deviceLock.keyGone
+            : t.vault.errors[code],
+        );
         // The count of what is left changed, and a record spent to its last
         // attempt is gone — which the welcome screen has to be told about.
         void vault.refresh();
@@ -208,10 +216,37 @@ export default function App() {
       <div className="app">
         <main className="app__view app__view--plain">
           <Onboarding
+            deviceLock={vault.status.deviceLock}
             onReady={(made) => {
               setIdentity(made);
               void vault.refresh();
             }}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // There is one, it is not open, and the iPhone's lock is the only one on it.
+  if (!identity && !vault.status.pin) {
+    return (
+      <div className="app">
+        <main className="app__view app__view--plain">
+          <DeviceLockScreen
+            error={unlockError}
+            busy={unlockBusy}
+            onUnlock={() => {
+              void unlock(openVaultWithDevice);
+            }}
+            footer={
+              <button
+                type="button"
+                className="button button--danger"
+                onClick={() => setSignOutAsked(true)}
+              >
+                {t.settings.security.signOut}
+              </button>
+            }
           />
         </main>
       </div>

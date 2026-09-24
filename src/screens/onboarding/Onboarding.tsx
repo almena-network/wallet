@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BrandSpinner } from "../../components/BrandSpinner";
 import { useI18n } from "../../i18n";
@@ -34,6 +34,11 @@ type Step =
 const SPINNER_MS = 900;
 
 type OnboardingProps = {
+  /**
+   * Whether the iPhone's own lock can be the wallet's. When it can, no PIN is
+   * asked for unless the phone turns out to have no passcode.
+   */
+  deviceLock: boolean;
   /** Hands over the identity: the wallet opens on the dashboard with it. */
   onReady: (identity: Identity) => void;
 };
@@ -42,7 +47,7 @@ type OnboardingProps = {
  * The way in: make an identity from new words, or bring one back from words
  * somebody already has.
  */
-export function Onboarding({ onReady }: OnboardingProps) {
+export function Onboarding({ deviceLock, onReady }: OnboardingProps) {
   const { t, locale } = useI18n();
   const [step, setStep] = useState<Step>({ name: "welcome" });
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +56,12 @@ export function Onboarding({ onReady }: OnboardingProps) {
   // step so the choice registers the instant it is tapped, while the words it
   // asks for are still being made.
   const [length, setLength] = useState<PhraseLength>(DEFAULT_PHRASE_LENGTH);
+
+  // Held in a ref rather than watched, like the keypad's callback: the parent
+  // rebuilds it on every render, and the effect that seals the identity must
+  // not restart — and seal it twice — because something above re-rendered.
+  const ready = useRef({ onReady, t });
+  ready.current = { onReady, t };
 
   const say = useCallback(
     (failure: unknown) => setError(t.onboarding.errors[errorCode(failure)]),
@@ -113,9 +124,31 @@ export function Onboarding({ onReady }: OnboardingProps) {
       return;
     }
     const identity = step.identity;
-    const timer = window.setTimeout(() => setStep({ name: "protect", identity }), SPINNER_MS);
-    return () => window.clearTimeout(timer);
-  }, [step]);
+    let active = true;
+    const timer = window.setTimeout(() => {
+      if (!deviceLock) {
+        setStep({ name: "protect", identity });
+        return;
+      }
+      // **On an iPhone the phone's own lock comes first**, and the mark keeps
+      // turning while it is written. Only a phone with no passcode — or one
+      // that would not take the key — is asked for a PIN instead.
+      createVault()
+        .then(() => active && ready.current.onReady(identity))
+        .catch((failure) => {
+          if (!active) {
+            return;
+          }
+          const code = vaultErrorCode(failure);
+          setError(code === "vault_no_passcode" ? null : ready.current.t.vault.errors[code]);
+          setStep({ name: "protect", identity });
+        });
+    }, SPINNER_MS);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [step, deviceLock]);
 
   /**
    * The PIN, and with it the only moment the identity is written down.

@@ -113,7 +113,9 @@
       "autoLockMinutes": {
         "one": "{count} minuto",
         "other": "{count} minutos"
-      }
+      },
+      "deviceLockLabel": "Se abre con",
+      "deviceLockValue": "Face ID o el código del iPhone"
     },
     "profile": {
       "title": "Tu nombre",
@@ -239,12 +241,22 @@
       "vault_unknown": "Eso no ha funcionado. Inténtalo otra vez.",
       "vault_no_device_key": "Este dispositivo no guarda ninguna llave. Usa tu PIN.",
       "vault_device_unproven": "Este dispositivo no te ha reconocido, así que no se ha activado nada. Inténtalo otra vez o sigue con tu PIN.",
-      "vault_no_device_store": "Este dispositivo no puede guardar una llave propia, así que el PIN es la manera de entrar."
+      "vault_no_device_store": "Este dispositivo no puede guardar una llave propia, así que el PIN es la manera de entrar.",
+      "vault_device_refused": "Este dispositivo no te ha reconocido. Inténtalo otra vez.",
+      "vault_no_pin": "Esta cartera se abre con el bloqueo del propio dispositivo, no con un PIN.",
+      "vault_no_passcode": "Este iPhone no tiene código, así que la cartera necesita un PIN propio."
     },
     "problem": {
       "title": "Este dispositivo tiene una identidad que no puede abrir",
       "body": "No se ha perdido nada y no se ha cambiado nada. Hasta que esto se resuelva, la cartera no va a ofrecerte crear una segunda identidad encima de la que ya hay.",
       "retry": "Reintentar"
+    },
+    "deviceLock": {
+      "title": "Bloqueada",
+      "subtitle": "Se abre con Face ID o el código de tu iPhone.",
+      "unlock": "Desbloquear",
+      "checking": "Esperando a tu iPhone",
+      "keyGone": "Este iPhone ya no guarda la llave: se borra al quitar el código. Cierra la sesión y vuelve con tu frase."
     }
   },
   "logout": {

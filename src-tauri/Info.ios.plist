@@ -32,6 +32,11 @@
 	     reads a code and nothing else. -->
 	<key>NSCameraUsageDescription</key>
 	<string>Almena Wallet uses the camera to read QR codes.</string>
+	<!-- Why Face ID is asked for. Without it iOS will not let the wallet use
+	     the face at all, and the device key's `require-user-presence` goes
+	     straight to the iPhone passcode instead of trying Face ID first. -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>Almena Wallet uses Face ID to open without the PIN.</string>
 	<!-- Portrait on a phone; a tablet keeps every orientation. Declared here as
 	     well as in the generated project because `tauri ios init` regenerates
 	     that one and not this file. -->

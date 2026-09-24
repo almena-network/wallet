@@ -24,6 +24,12 @@
 //! there is nothing to steal and compare against, and the check is a message
 //! authentication code rather than a comparison.
 //!
+//! **On an iPhone with a passcode there is no PIN at all.** The device's own
+//! lock — the face first, the passcode after it — is the wallet's, and the
+//! record carries no PIN wrap: see [`store::set_device_lock`]. A PIN is chosen
+//! only where the iPhone has no passcode, and a wallet that has one is moved
+//! over the next time it is opened, once the passcode is there.
+//!
 //! **Every PIN goes through one door.** There is exactly one function that
 //! checks digits, and it is the one that spends an attempt — because a check
 //! that does not count is a wallet that can be guessed at forever through
@@ -79,6 +85,14 @@ pub enum VaultError {
     DeviceUnproven,
     /// This platform has nowhere to keep a device key.
     NoDeviceStore,
+    /// The device would not hand the key back: a face not recognised, a prompt
+    /// dismissed.
+    DeviceRefused,
+    /// Asked for digits on a record that has none.
+    NoPin,
+    /// The iPhone has no passcode, so its lock cannot be the wallet's.
+    #[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+    NoPasscode,
     /// What was found is not a record this wallet reads.
     Unreadable,
     /// A record a later version of the wallet wrote.
@@ -102,6 +116,9 @@ impl VaultError {
             Self::NoDeviceKey => "vault_no_device_key",
             Self::DeviceUnproven => "vault_device_unproven",
             Self::NoDeviceStore => "vault_no_device_store",
+            Self::DeviceRefused => "vault_device_refused",
+            Self::NoPin => "vault_no_pin",
+            Self::NoPasscode => "vault_no_passcode",
             Self::Unreadable => "vault_unreadable",
             Self::TooNew => "vault_too_new",
             Self::Storage => "vault_storage",
@@ -130,8 +147,13 @@ pub struct VaultStatus {
     /// one they have. A store that did not answer must never look like an empty
     /// device.
     pub problem: Option<&'static str>,
+    /// Whether digits open this at all. False where the device's lock is the
+    /// only one.
+    pub pin: bool,
     /// How long the PIN is, so the keypad can be drawn before it is typed.
     pub digits: Option<u8>,
+    /// Whether the device's own lock can be the wallet's, with no PIN: an iPhone.
+    pub device_lock: bool,
     /// Whether the device is holding a key, and so whether a face opens this.
     pub device_key: bool,
     /// Whether this platform can offer opening with the device at all.
@@ -147,11 +169,13 @@ pub struct VaultStatus {
 impl VaultStatus {
     /// What an empty device looks like, and what a device that will not answer
     /// looks like — which are told apart by `problem` and nothing else.
-    const fn nothing(problem: Option<&'static str>) -> Self {
+    fn nothing(problem: Option<&'static str>) -> Self {
         Self {
             exists: false,
             problem,
+            pin: false,
             digits: None,
+            device_lock: store::device_lockable(),
             device_key: false,
             device_unlock: false,
             attempts_left: record::ATTEMPTS,
@@ -175,25 +199,31 @@ pub fn vault_status<R: Runtime>(app: tauri::AppHandle<R>, gate: State<'_, Gate>)
     status(&app)
 }
 
-/// Writes down the identity that is open, behind a PIN.
+/// Writes down the identity that is open, behind a PIN or behind the device.
 ///
 /// Called at the end of creating or restoring one: the seed is already held, and
-/// this is what makes it survive the process.
+/// this is what makes it survive the process. With no PIN the device's own lock
+/// is the only one, which only an iPhone with a passcode offers.
 ///
 /// # Errors
 ///
 /// [`VaultError::NoIdentity`] with nothing open, [`VaultError::Exists`] where
 /// there already is a record — including one that cannot be read, which must not
-/// be written over — and the PIN errors for digits this wallet will not take.
+/// be written over — the PIN errors for digits this wallet will not take, and
+/// [`VaultError::NoPasscode`] with no PIN on an iPhone that has no passcode,
+/// which is the interface's cue to ask for one.
 #[tauri::command(async)]
 pub fn vault_create<R: Runtime>(
     app: tauri::AppHandle<R>,
     held: State<'_, Held>,
     gate: State<'_, Gate>,
-    pin: String,
+    pin: Option<String>,
 ) -> Result<VaultStatus, VaultError> {
     let _guard = gate.0.lock();
-    let digits = check(&pin)?;
+    let digits = pin.as_deref().map(check).transpose()?;
+    if pin.is_none() && !store::device_lockable() {
+        return Err(VaultError::NoDeviceStore);
+    }
 
     // Anything at all where the record goes, readable or not, means there is
     // already an identity on this device.
@@ -205,7 +235,16 @@ pub fn vault_create<R: Runtime>(
     }
 
     let seed = held.seed().ok_or(VaultError::NoIdentity)?;
-    let (record, _key) = Record::seal(&seed, &pin, digits)?;
+    let record = match (pin, digits) {
+        (Some(pin), Some(digits)) => Record::seal(&seed, &pin, digits)?.0,
+        _ => {
+            // The key first: a record written without a PIN and without the
+            // key beside it would be one nothing opens.
+            let (record, key) = Record::seal_device(&seed)?;
+            store::set_device_lock(&*key)?;
+            record
+        }
+    };
     store::write(&app, &record.write())?;
 
     Ok(status(&app))
@@ -226,8 +265,10 @@ pub fn vault_open<R: Runtime>(
 ) -> Result<Identity, VaultError> {
     let _guard = gate.0.lock();
     let (record, key) = attempt(&app, &held, &pin)?;
+    let seed = record.seed(&key)?;
+    to_device_lock(&app, &record, &key);
 
-    Ok(crate::identity::adopt(record.seed(&key)?, &held))
+    Ok(crate::identity::adopt(seed, &held))
 }
 
 /// Opens it with the key the device is holding, which the system will not
@@ -249,13 +290,32 @@ pub fn vault_open_with_device<R: Runtime>(
 ) -> Result<Identity, VaultError> {
     let _guard = gate.0.lock();
     let (record, _) = load(&app)?.ok_or(VaultError::Nothing)?;
-    let key = store::device_key().ok_or(VaultError::NoDeviceKey)?;
-    let key: [u8; 32] = key
-        .as_slice()
-        .try_into()
-        .map_err(|_| VaultError::NoDeviceKey)?;
+    let key = store::device_key()?;
+    let key: Zeroizing<[u8; 32]> = Zeroizing::new(
+        key.as_slice()
+            .try_into()
+            .map_err(|_| VaultError::NoDeviceKey)?,
+    );
+    let seed = record.seed(&key)?;
+    to_device_lock(&app, &record, &key);
 
-    Ok(crate::identity::adopt(record.seed(&key)?, &held))
+    Ok(crate::identity::adopt(seed, &held))
+}
+
+/// **Moves a wallet with a PIN over to the iPhone's lock**, once it can be.
+///
+/// Called with the record just opened and the key that opened it. Where the
+/// device's lock cannot be the wallet's — not an iPhone, or one still without a
+/// passcode — nothing changes and the PIN stays; it is tried again at the next
+/// opening. The key goes in first and the PIN comes off after, so a failure
+/// between the two leaves a record the PIN still opens.
+fn to_device_lock<R: Runtime>(app: &tauri::AppHandle<R>, record: &Record, key: &[u8; 32]) {
+    if !record.has_pin() || !store::device_lockable() {
+        return;
+    }
+    if store::set_device_lock(key).is_ok() {
+        let _ = store::write(app, &record.without_pin().write());
+    }
 }
 
 /// Changes the PIN, leaving the identity exactly as it was.
@@ -303,6 +363,11 @@ pub fn vault_set_device<R: Runtime>(
 ) -> Result<VaultStatus, VaultError> {
     let _guard = gate.0.lock();
 
+    // Where the device's lock is the only one, taking its key away would leave
+    // nothing that opens the record.
+    if !load(&app)?.ok_or(VaultError::Nothing)?.0.has_pin() {
+        return Err(VaultError::NoPin);
+    }
     if enabled && !device_unlock() {
         return Err(VaultError::NoDeviceStore);
     }
@@ -323,7 +388,7 @@ pub fn vault_set_device<R: Runtime>(
         // refused, a prompt dismissed, a sensor that would not answer. The key
         // goes rather than sitting there half-turned-on.
         match store::device_key() {
-            Some(proof) if proof == *key.as_ref() => record,
+            Ok(proof) if proof == *key.as_ref() => record,
             _ => {
                 let _ = store::set_device_key(None);
                 return Err(VaultError::DeviceUnproven);
@@ -372,6 +437,10 @@ fn attempt<R: Runtime>(
     pin: &str,
 ) -> Result<(Record, Zeroizing<[u8; 32]>), VaultError> {
     let (mut record, _) = load(app)?.ok_or(VaultError::Nothing)?;
+    // Not an answer, so not an attempt: there are no digits to get wrong.
+    if !record.has_pin() {
+        return Err(VaultError::NoPin);
+    }
 
     let key = match record.unwrap_pin(pin) {
         Ok(key) => key,
@@ -448,7 +517,9 @@ fn status<R: Runtime>(app: &tauri::AppHandle<R>) -> VaultStatus {
         Ok(Some((record, home))) => VaultStatus {
             exists: true,
             problem: None,
-            digits: Some(record.digits),
+            pin: record.has_pin(),
+            digits: record.digits,
+            device_lock: store::device_lockable(),
             device_key: record.device_wrap,
             device_unlock: device_unlock(),
             attempts_left: record.left(),
