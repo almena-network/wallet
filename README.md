@@ -99,6 +99,9 @@ Dock icon on macOS) brings it back; the tray's menu is where it is quit. A
 second launch brings the running one to the front instead of starting another,
 and the window reopens where it was left. Profile → Security can have it open at
 login, minimised and locked.
+Messages that arrive while it is not in front become system notifications,
+saying as much as Profile → Notifications allows: everything, who sent it, or
+nothing identifying.
 
 ## Links and codes
 

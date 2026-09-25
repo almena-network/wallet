@@ -12,6 +12,10 @@
 //!   camera the system lets an app drive to read a code.
 //! - `autostart` only exists on a computer: the Security switch that opens the
 //!   wallet at login, minimised.
+//! - `notification` only exists on a computer: messages that arrive while the
+//!   wallet is not in front are told to the system, saying as much as the
+//!   person chose ([`notify`]). A phone is told by push instead, and the push
+//!   plugin — a fork of this one — takes its native symbols there.
 //! - `deep-link` exists everywhere: an `almena://` link — the scheme the
 //!   wallet's own invitations are written with — opens the wallet. On a
 //!   computer a link opened while it runs arrives through `single-instance`.
@@ -39,6 +43,7 @@
 mod backdrop;
 mod identity;
 mod messaging;
+mod notify;
 #[cfg(target_os = "ios")]
 mod scene;
 mod tray;
@@ -105,6 +110,11 @@ pub fn run() {
         Some(vec![window::MINIMIZED]),
     ));
 
+    // The system's notifications, for messages that arrive with the wallet on
+    // the tray or minimised — see `notify`.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_notification::init());
+
     // The camera, where there is one the wallet may drive.
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
@@ -156,10 +166,12 @@ pub fn run() {
             identity::manage(app.handle());
             vault::manage(app.handle());
             messaging::manage(app.handle());
+            notify::manage(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             platform_info,
+            notify::notifications_configure,
             tray::install_tray,
             backdrop::backdrop_set,
             identity::identity_draft,

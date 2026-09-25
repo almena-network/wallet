@@ -489,7 +489,8 @@ pub async fn messages_sync<R: Runtime>(
     let _guard = gate.0.lock().await;
     let mut state = state::read(&app, &seed)?;
     let outcome = sync(&seed, &mut state).await?;
-    let changed = apply(&app, &seed, &mut state, outcome)?;
+    // Asked for from the interface, so somebody is looking: nothing to notify.
+    let changed = apply(&app, &seed, &mut state, outcome)?.changed;
 
     Ok(Synced {
         changed,
@@ -964,9 +965,15 @@ async fn handle(
     Ok(received)
 }
 
+/// What [`apply`] came to: how much changed, and the messages that were new —
+/// which live delivery may tell the system about (`crate::notify`).
+pub(crate) struct Applied {
+    pub changed: usize,
+    pub fresh: Vec<crate::notify::Fresh>,
+}
+
 /// Writes what `outcome` brought into the conversations, counts it into their
-/// relationships, and writes the state when anything changed. Returns how much
-/// did.
+/// relationships, and writes the state when anything changed.
 ///
 /// What arrived is already acknowledged, so a conversation that cannot be
 /// written to does not stop the rest, nor the state, from being written.
@@ -975,8 +982,9 @@ fn apply<R: Runtime>(
     seed: &[u8; 64],
     state: &mut state::State,
     outcome: Outcome,
-) -> Result<usize, MessagingError> {
+) -> Result<Applied, MessagingError> {
     let mut changed = outcome.changed;
+    let mut fresh = Vec::new();
     let mut failure = None;
     for arrival in outcome.arrivals {
         let Some(relationship) = state
@@ -999,6 +1007,10 @@ fn apply<R: Runtime>(
         ) {
             Ok(true) => {
                 relationship.unread += 1;
+                fresh.push(crate::notify::Fresh {
+                    from: Contact::from(&*relationship).name,
+                    content: last.content.clone(),
+                });
                 if relationship.last.as_ref().is_none_or(|l| l.at <= last.at) {
                     relationship.last = Some(last);
                 }
@@ -1013,7 +1025,7 @@ fn apply<R: Runtime>(
     }
     match failure {
         Some(error) => Err(error),
-        None => Ok(changed),
+        None => Ok(Applied { changed, fresh }),
     }
 }
 

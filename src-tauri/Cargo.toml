@@ -127,6 +127,10 @@ zbus-secret-service-keyring-store = "1"
 # Opening at login, when the person turns it on in Security; the wallet then
 # starts minimised (`window::MINIMIZED`).
 tauri-plugin-autostart = "2"
+# The system's notifications, for messages that arrive while the wallet is on
+# the tray or minimised (`notify.rs`). A computer only: on a phone the push
+# plugin is a fork of this one and claims the same native symbols.
+tauri-plugin-notification = "2"
 # A computer runs one wallet: a second launch — or an `almena://` link opened
 # while it runs — goes to the one already open (`deep-link` forwards the URL).
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

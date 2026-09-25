@@ -14,6 +14,9 @@
   "tray": {
     "quit": "Salir"
   },
+  "notifications": {
+    "newMessage": "Mensaje nuevo"
+  },
   "home": {
     "greeting": "Tu cartera"
   },
@@ -94,6 +97,10 @@
         "title": "Apariencia",
         "hint": "El color que viste la cartera"
       },
+      "notifications": {
+        "title": "Notificaciones",
+        "hint": "Qué dice una notificación"
+      },
       "messaging": {
         "title": "Mensajería",
         "hint": "Dónde esperan tus mensajes"
@@ -122,6 +129,22 @@
         "dark": "Oscuro",
         "light": "Claro"
       }
+    },
+    "notifications": {
+      "title": "Cuando llega un mensaje",
+      "full": {
+        "label": "Todo",
+        "hint": "«Lucía: ¿Nos vemos a las diez?»"
+      },
+      "name": {
+        "label": "Quién lo envía",
+        "hint": "«Lucía · Mensaje nuevo»"
+      },
+      "none": {
+        "label": "Nada identificable",
+        "hint": "«Almena Wallet · Mensaje nuevo»"
+      },
+      "note": "Se muestran mientras la cartera no está delante. El sistema guarda lo que muestran en su propio historial, fuera de la cartera."
     },
     "security": {
       "title": "Seguridad",

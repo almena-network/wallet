@@ -10,6 +10,7 @@ import { useAutoLock, useIdle } from "./autolock";
 import { useBackdrop } from "./backdrop";
 import { invitationKind, useDeepLinks } from "./links";
 import { useLive } from "./live";
+import { useNotificationPrivacy } from "./notify";
 import { useBackInSight } from "./lock";
 import { usePlatform } from "./platform";
 import { registerPush, unregisterPush } from "./push";
@@ -45,6 +46,7 @@ export default function App() {
   const { accent, setAccent } = useAccent();
   const { theme, setTheme } = useTheme();
   const { autoLock, setAutoLock } = useAutoLock();
+  const { privacy, setPrivacy } = useNotificationPrivacy();
   const platform = usePlatform();
   // On a computer, the wallet on the system tray: closing the window puts it
   // away rather than ending it, and the tray's menu is where it is quit.
@@ -339,6 +341,8 @@ export default function App() {
             onThemeChange={setTheme}
             autoLock={autoLock}
             onAutoLockChange={setAutoLock}
+            privacy={privacy}
+            onPrivacyChange={setPrivacy}
             onKeypad={setKeypad}
             onSignOut={() => setSignOutAsked(true)}
           />

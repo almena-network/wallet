@@ -14,6 +14,9 @@
   "tray": {
     "quit": "Quit"
   },
+  "notifications": {
+    "newMessage": "New message"
+  },
   "home": {
     "greeting": "Your wallet"
   },
@@ -94,6 +97,10 @@
         "title": "Appearance",
         "hint": "The colour the wallet wears"
       },
+      "notifications": {
+        "title": "Notifications",
+        "hint": "What a notification says"
+      },
       "messaging": {
         "title": "Messaging",
         "hint": "Where your messages wait"
@@ -122,6 +129,22 @@
         "dark": "Dark",
         "light": "Light"
       }
+    },
+    "notifications": {
+      "title": "When a message arrives",
+      "full": {
+        "label": "Everything",
+        "hint": "“Lucía: See you at ten?”"
+      },
+      "name": {
+        "label": "Who it is from",
+        "hint": "“Lucía · New message”"
+      },
+      "none": {
+        "label": "Nothing identifying",
+        "hint": "“Almena Wallet · New message”"
+      },
+      "note": "Shown while the wallet is not in front. The system keeps what it shows in its own history, outside the wallet."
     },
     "security": {
       "title": "Security",

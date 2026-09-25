@@ -7,6 +7,8 @@ import { useMediation } from "../mediator";
 import { registerPush } from "../push";
 import type { Accent } from "../appearance";
 import type { AutoLock } from "../autolock";
+import type { Privacy } from "../notify";
+import { usePlatform } from "../platform";
 import type { Theme } from "../theme";
 import type { Vault } from "../vault";
 import { PinChange } from "./PinChange";
@@ -15,13 +17,14 @@ import { InviteScreen } from "./InviteScreen";
 import { MediatorConnectScreen } from "./MediatorConnectScreen";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { MessagingSettings } from "./settings/MessagingSettings";
+import { NotificationsSettings } from "./settings/NotificationsSettings";
 import { ProfileSettings } from "./settings/ProfileSettings";
 import { SecuritySettings } from "./settings/SecuritySettings";
 
 /** Where the profile leads, and the list that leads there. */
-type Section = "profile" | "appearance" | "messaging" | "security";
+type Section = "profile" | "appearance" | "notifications" | "messaging" | "security";
 
-const SECTIONS: Section[] = ["profile", "appearance", "messaging", "security"];
+const SECTIONS: Section[] = ["profile", "appearance", "notifications", "messaging", "security"];
 
 /** A screen a section sends somebody to, and comes back from. */
 type Aside = "connect" | "pin" | "device" | "invite";
@@ -36,6 +39,9 @@ type ProfileScreenProps = {
   /** How long the wallet stays open with nobody using it. */
   autoLock: AutoLock;
   onAutoLockChange: (minutes: AutoLock) => void;
+  /** How much a system notification says about a message. */
+  privacy: Privacy;
+  onPrivacyChange: (privacy: Privacy) => void;
   /**
    * Told whether a keypad is taking the whole screen — replacing the PIN or
    * arming the device — so the tab bar steps aside for it.
@@ -59,12 +65,19 @@ export function ProfileScreen({
   onThemeChange,
   autoLock,
   onAutoLockChange,
+  privacy,
+  onPrivacyChange,
   onKeypad,
   onSignOut,
 }: ProfileScreenProps) {
   const t = useTranslations();
   const [section, setSection] = useState<Section | null>(null);
   const mediation = useMediation();
+  // Notifications are the computer's: a phone is told by push, which says
+  // nothing about the message whatever is chosen here.
+  const sections = usePlatform().kind === "mobile"
+    ? SECTIONS.filter((name) => name !== "notifications")
+    : SECTIONS;
   // Choosing a mediator, replacing the PIN and arming the device are screens of
   // their own, with their own way back, so the section is left for them rather
   // than drawn under them — and returned to afterwards.
@@ -148,6 +161,9 @@ export function ProfileScreen({
             onThemeChange={onThemeChange}
           />
         ) : null}
+        {section === "notifications" ? (
+          <NotificationsSettings privacy={privacy} onPrivacyChange={onPrivacyChange} />
+        ) : null}
         {section === "messaging" ? (
           <MessagingSettings mediation={mediation} onConnect={() => setAside("connect")} />
         ) : null}
@@ -181,7 +197,7 @@ export function ProfileScreen({
       <ProfileHeader />
 
       <nav className="menu" aria-label={t.settings.title}>
-        {SECTIONS.map((name) => (
+        {sections.map((name) => (
           <button key={name} type="button" className="menu__item" onClick={() => setSection(name)}>
             <span className="menu__text">
               <span className="menu__title">{t.settings.sections[name].title}</span>

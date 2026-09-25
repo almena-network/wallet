@@ -147,8 +147,9 @@ async fn session<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), MessagingE
         let _guard = gate.0.lock().await;
         let mut state = state::read(app, &seed)?;
         let outcome = sync(&seed, &mut state).await?;
-        let changed = apply(app, &seed, &mut state, outcome)?;
-        announce(app, changed, &state);
+        let applied = apply(app, &seed, &mut state, outcome)?;
+        announce(app, applied.changed, &state);
+        crate::notify::arrived(app, &applied.fresh);
     }
 
     loop {
@@ -170,8 +171,9 @@ async fn session<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), MessagingE
                 &mut outcome,
             )
             .await?;
-            let changed = apply(app, &seed, &mut state, outcome)?;
-            announce(app, changed, &state);
+            let applied = apply(app, &seed, &mut state, outcome)?;
+            announce(app, applied.changed, &state);
+            crate::notify::arrived(app, &applied.fresh);
             received
         };
         socket.acknowledge(&mediator, &inbox, &received).await?;
