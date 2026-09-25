@@ -85,6 +85,19 @@ pub fn put<R: Runtime>(
     Ok(new)
 }
 
+/// Removes the conversation `id`'s history.
+pub fn remove<R: Runtime>(app: &tauri::AppHandle<R>, id: &str) -> Result<(), MessagingError> {
+    let path = file(app, id)?;
+    for path in [path.with_extension("json.writing"), path] {
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(MessagingError::Storage),
+        }
+    }
+    Ok(())
+}
+
 /// Removes every conversation. Called when the identity leaves the device.
 pub fn clear<R: Runtime>(app: &tauri::AppHandle<R>) {
     if let Ok(dir) = state::directory(app) {

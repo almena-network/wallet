@@ -158,6 +158,12 @@ they are layered and drawn by hand, and only ever copied forward.
 [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for the code
 layout.
 
+## Publishing to the stores
+
+What the App Store and Google Play require — review guidelines, privacy
+declarations, legal agreements — and what they recommend, with how this wallet
+meets each, is in [docs/store-publishing.md](docs/store-publishing.md).
+
 ## Contributing and security
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and the

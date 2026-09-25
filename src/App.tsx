@@ -62,6 +62,9 @@ export default function App() {
   const vault = useVault();
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [route, setRoute] = useState<Route>("home");
+  // Bumped by every press on the floating menu, so a tab is opened afresh at
+  // its first screen even when it is the one already showing.
+  const [visit, setVisit] = useState(0);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [unlockBusy, setUnlockBusy] = useState(false);
   // Signing out is reachable from Settings, from behind the lock and from a
@@ -326,11 +329,12 @@ export default function App() {
   const select = (next: Route) => {
     setConversation(null);
     setRoute(next);
+    setVisit((count) => count + 1);
   };
 
   return (
     <div className={cameraPreview ? "app app--camera" : "app"}>
-      <main className={keypad ? "app__view app__view--plain" : "app__view"} key={route}>
+      <main className={keypad ? "app__view app__view--plain" : "app__view"} key={`${route}-${visit}`}>
         {route === "home" ? <HomeScreen /> : null}
         {route === "messages" ? <MessagesTab initialConversation={conversation} /> : null}
         {route === "scan" ? (

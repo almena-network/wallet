@@ -2304,6 +2304,79 @@ html[data-camera-preview="true"] .app::before {
   gap: 8px;
 }
 
+/* A row with one action behind it, uncovered by dragging the row left. The
+   action fills the row's height and is only ever seen where the row has moved
+   off it; the row slides back with the spring every control here uses. */
+.swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+}
+
+.swipe-row__action {
+  position: absolute;
+  /* A pixel in, so no red shows at the rounded corners of a row at rest. */
+  inset: 1px 1px 1px auto;
+  width: 95px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--danger);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.swipe-row__front {
+  position: relative;
+  touch-action: pan-y;
+  transition: transform 0.28s var(--ease-spring);
+}
+
+.swipe-row__front--dragging {
+  transition: none;
+}
+
+/* The menu a right click opens: a small card at the pointer, over everything. */
+.context-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  min-width: 160px;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.24);
+}
+
+.context-menu__item {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu__item:hover,
+.context-menu__item:focus-visible {
+  outline: none;
+  background: var(--surface);
+}
+
+.context-menu__item--danger {
+  color: var(--danger);
+}
+
+.context-menu__item--danger:hover,
+.context-menu__item--danger:focus-visible {
+  background: var(--danger-soft);
+}
+
 /* A person's mark: the first letter of what they are called, in a circle, so
    a contact reads as somebody and not as a setting. */
 .row__icon--initial {

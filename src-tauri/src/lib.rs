@@ -198,6 +198,7 @@ pub fn run() {
             messaging::messages_sync,
             messaging::conversation_read,
             messaging::conversation_seen,
+            messaging::conversation_clear,
             messaging::message_send,
             messaging::message_retry,
             messaging::contact_rename,

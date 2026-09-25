@@ -75,6 +75,10 @@ pub struct Relationship {
     /// every conversation.
     #[serde(default)]
     pub last: Option<Last>,
+    /// Its history was deleted: it stays a contact but leaves the inbox until
+    /// something is said in it again.
+    #[serde(default)]
+    pub cleared: bool,
 }
 
 impl Relationship {
@@ -90,6 +94,7 @@ impl Relationship {
             alias: None,
             unread: 0,
             last: None,
+            cleared: false,
         }
     }
 }
@@ -285,6 +290,7 @@ mod tests {
                     at: 1,
                     mine: false,
                 }),
+                cleared: false,
             }],
             profile: Some("Bob".into()),
         }

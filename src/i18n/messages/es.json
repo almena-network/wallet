@@ -84,7 +84,8 @@
     "emptyHint": "Invita a alguien, o acepta su invitación, con el botón +.",
     "sync": "Buscar mensajes",
     "mine": "Tú: {content}",
-    "nothingYet": "Aún no habéis hablado"
+    "nothingYet": "Aún no habéis hablado",
+    "delete": "Eliminar"
   },
   "settings": {
     "title": "Ajustes",

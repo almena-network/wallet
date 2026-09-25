@@ -24,6 +24,8 @@ export type Contact = {
   since: number;
   unread: number;
   last: Last | null;
+  /** Its history was deleted; the inbox leaves it out until it has news. */
+  cleared: boolean;
 };
 
 /** The latest message of a conversation. */
@@ -105,6 +107,11 @@ export function readConversation(id: string): Promise<Conversation> {
 /** Marks a conversation as read. */
 export function markSeen(id: string): Promise<void> {
   return invoke<void>("conversation_seen", { id });
+}
+
+/** Deletes a conversation's history. The contact stays. */
+export function clearConversation(id: string): Promise<void> {
+  return invoke<void>("conversation_clear", { id });
 }
 
 /** Sends a message; one that did not go comes back marked `failed`. */

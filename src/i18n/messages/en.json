@@ -84,7 +84,8 @@
     "emptyHint": "Invite somebody, or accept their invitation, with the + button.",
     "sync": "Check for messages",
     "mine": "You: {content}",
-    "nothingYet": "Nothing said yet"
+    "nothingYet": "Nothing said yet",
+    "delete": "Delete"
   },
   "settings": {
     "title": "Settings",

@@ -178,6 +178,8 @@ pub struct Contact {
     pub since: u64,
     pub unread: u32,
     pub last: Option<Last>,
+    /// Its history was deleted; the inbox leaves it out until it has news.
+    pub cleared: bool,
 }
 
 impl From<&Relationship> for Contact {
@@ -197,6 +199,7 @@ impl From<&Relationship> for Contact {
             since: relationship.since,
             unread: relationship.unread,
             last: relationship.last.clone(),
+            cleared: relationship.cleared,
         }
     }
 }
@@ -537,6 +540,26 @@ pub async fn conversation_seen<R: Runtime>(
         state::write(&app, &seed, &state)?;
     }
     Ok(())
+}
+
+/// Deletes the history of the conversation `id`. The relationship stays, and
+/// the conversation is back in the inbox with the next message either way.
+#[tauri::command]
+pub async fn conversation_clear<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    gate: State<'_, Gate>,
+    id: String,
+) -> Result<(), MessagingError> {
+    let seed = seed(&held)?;
+    let _guard = gate.0.lock().await;
+    let mut state = state::read(&app, &seed)?;
+    let relationship = find_mut(&mut state.relationships, &id)?;
+    relationship.unread = 0;
+    relationship.last = None;
+    relationship.cleared = true;
+    conversation::remove(&app, &id)?;
+    state::write(&app, &seed, &state)
 }
 
 /// Sends `content` in the conversation `id`. What the other side's mediator
@@ -1082,6 +1105,7 @@ fn apply<R: Runtime>(
         ) {
             Ok(true) => {
                 relationship.unread += 1;
+                relationship.cleared = false;
                 fresh.push(crate::notify::Fresh {
                     from: Contact::from(&*relationship).name,
                     content: last.content.clone(),
@@ -1128,6 +1152,7 @@ async fn written<R: Runtime>(
         .await
         .is_err();
     conversation::put(app, seed, id, entry.clone())?;
+    relationship.cleared = false;
     if relationship.last.as_ref().is_none_or(|l| l.at <= entry.at) {
         relationship.last = Some(Last {
             content: entry.content.clone(),

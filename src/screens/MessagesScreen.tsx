@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { ContextMenu } from "../components/ContextMenu";
 import { MessagesIcon, PlusIcon, SyncIcon } from "../components/icons";
+import { SwipeRow } from "../components/SwipeRow";
 import { useI18n } from "../i18n";
 import { fill } from "../i18n/format";
-import { listContacts, onMessagesChanged, syncMessages, type Contact } from "../contacts";
+import {
+  clearConversation,
+  listContacts,
+  onMessagesChanged,
+  syncMessages,
+  type Contact,
+} from "../contacts";
 import { errorCode } from "../mediator";
 import { when } from "../when";
 
@@ -24,6 +32,10 @@ export function MessagesScreen({ onNewConversation, onOpen }: MessagesScreenProp
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The row whose Delete a finger uncovered, and the menu a right click opened.
+  const [swiped, setSwiped] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   const sync = useCallback(() => {
     setSyncing(true);
@@ -42,6 +54,21 @@ export function MessagesScreen({ onNewConversation, onOpen }: MessagesScreenProp
   }, [sync]);
 
   useEffect(() => onMessagesChanged((synced) => setContacts(synced.contacts)), []);
+
+  const remove = (id: string) => {
+    setSwiped(null);
+    clearConversation(id)
+      .then(() =>
+        setContacts((current) =>
+          current?.map((c) => (c.id === id ? { ...c, cleared: true } : c)) ?? current,
+        ),
+      )
+      .catch((failure) => setError(t.messaging.errors[errorCode(failure)]));
+  };
+
+  // A deleted conversation is still a contact, under "+"; it is back here
+  // with the next message either way.
+  const shown = contacts?.filter((contact) => !contact.cleared) ?? null;
 
   return (
     <div className="screen">
@@ -68,7 +95,7 @@ export function MessagesScreen({ onNewConversation, onOpen }: MessagesScreenProp
 
       {error ? <p className="card__note card__note--warning">{error}</p> : null}
 
-      {contacts === null ? null : contacts.length === 0 ? (
+      {shown === null ? null : shown.length === 0 ? (
         <section className="card">
           <div className="empty-state">
             <span className="empty-state__icon">
@@ -80,12 +107,19 @@ export function MessagesScreen({ onNewConversation, onOpen }: MessagesScreenProp
         </section>
       ) : (
         <section className="list" aria-label={t.messages.title}>
-          {contacts.map((contact) => (
-            <button
-              type="button"
+          {shown.map((contact) => (
+            <SwipeRow
               key={contact.id}
               className={`row message-row${contact.unread > 0 ? " message-row--unread" : ""}`}
-              onClick={() => onOpen(contact.id)}
+              open={swiped === contact.id}
+              onOpenChange={(open) => setSwiped(open ? contact.id : null)}
+              onPress={() => onOpen(contact.id)}
+              onContextMenu={(x, y) => {
+                setSwiped(null);
+                setMenu({ id: contact.id, x, y });
+              }}
+              actionLabel={t.messages.delete}
+              onAction={() => remove(contact.id)}
             >
               <span className="row__icon row__icon--initial" aria-hidden="true">
                 {initial(contact.name)}
@@ -110,10 +144,20 @@ export function MessagesScreen({ onNewConversation, onOpen }: MessagesScreenProp
                   <span className="message-row__count">{contact.unread}</span>
                 ) : null}
               </span>
-            </button>
+            </SwipeRow>
           ))}
         </section>
       )}
+
+      {menu ? (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          label={t.messages.title}
+          items={[{ label: t.messages.delete, danger: true, onSelect: () => remove(menu.id) }]}
+          onClose={closeMenu}
+        />
+      ) : null}
     </div>
   );
 }
