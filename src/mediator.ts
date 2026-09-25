@@ -71,6 +71,7 @@ export type MessagingErrorCode =
   | "messaging_unreadable"
   | "messaging_storage"
   | "messaging_entropy"
+  | "messaging_calls_unavailable"
   | "messaging_unknown";
 
 const CODES: MessagingErrorCode[] = [
@@ -90,6 +91,7 @@ const CODES: MessagingErrorCode[] = [
   "messaging_unreadable",
   "messaging_storage",
   "messaging_entropy",
+  "messaging_calls_unavailable",
 ];
 
 /** Whatever a rejected command threw, as a code this interface has a word for. */

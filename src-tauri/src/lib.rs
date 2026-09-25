@@ -203,6 +203,8 @@ pub fn run() {
             messaging::contact_rename,
             messaging::profile_read,
             messaging::profile_write,
+            messaging::call_ice_servers,
+            messaging::call_send,
             messaging::profile_photo_read,
             messaging::profile_photo_write,
             messaging::live::live_start,

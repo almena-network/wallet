@@ -354,7 +354,8 @@
       "messaging_pending": "Todavía no ha respondido a tu invitación. Podrás escribirle cuando lo haga.",
       "messaging_contact_unknown": "Ese contacto no está en este dispositivo.",
       "messaging_message_invalid": "Un mensaje no puede estar vacío ni pasar de 4.000 caracteres.",
-      "messaging_photo_invalid": "Esa imagen no es una que la cartera pueda guardar. Prueba con otra."
+      "messaging_photo_invalid": "Esa imagen no es una que la cartera pueda guardar. Prueba con otra.",
+      "messaging_calls_unavailable": "Tu mediador no retransmite llamadas, así que no se puede llamar."
     }
   },
   "conversations": {
@@ -407,6 +408,35 @@
       "aliasLabel": "Nombre",
       "save": "Guardar",
       "clear": "Usar su nombre"
+    }
+  },
+  "calls": {
+    "audio": "Llamada de voz",
+    "video": "Videollamada",
+    "calling": "Llamando…",
+    "incomingAudio": "Llamada de voz entrante",
+    "incomingVideo": "Videollamada entrante",
+    "connecting": "Conectando…",
+    "accept": "Aceptar",
+    "decline": "Rechazar",
+    "hangUp": "Colgar",
+    "mute": "Silenciar",
+    "unmute": "Activar micrófono",
+    "cameraOff": "Apagar cámara",
+    "cameraOn": "Encender cámara",
+    "ended": {
+      "ended": "Llamada finalizada",
+      "cancelled": "Llamada cancelada",
+      "unanswered": "Sin respuesta",
+      "declined": "Rechazada",
+      "busy": "Ocupado",
+      "failed": "La llamada se ha cortado",
+      "missed": "Llamada perdida"
+    },
+    "errors": {
+      "call_media": "No se ha podido usar el micrófono o la cámara. Revisa los permisos.",
+      "call_relay": "No se ha podido llegar al relé de llamadas.",
+      "call_failed": "La llamada no ha podido conectar."
     }
   }
 }

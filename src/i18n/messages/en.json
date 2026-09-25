@@ -354,7 +354,8 @@
       "messaging_pending": "They have not answered your invitation yet. You can write once they do.",
       "messaging_contact_unknown": "That contact is not on this device.",
       "messaging_message_invalid": "A message cannot be empty or longer than 4,000 characters.",
-      "messaging_photo_invalid": "That picture is not one this wallet can keep. Try another one."
+      "messaging_photo_invalid": "That picture is not one this wallet can keep. Try another one.",
+      "messaging_calls_unavailable": "Your mediator does not relay calls, so none can be made."
     }
   },
   "conversations": {
@@ -407,6 +408,35 @@
       "aliasLabel": "Name",
       "save": "Save",
       "clear": "Use their name"
+    }
+  },
+  "calls": {
+    "audio": "Voice call",
+    "video": "Video call",
+    "calling": "Calling…",
+    "incomingAudio": "Incoming voice call",
+    "incomingVideo": "Incoming video call",
+    "connecting": "Connecting…",
+    "accept": "Accept",
+    "decline": "Decline",
+    "hangUp": "Hang up",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "cameraOff": "Turn camera off",
+    "cameraOn": "Turn camera on",
+    "ended": {
+      "ended": "Call ended",
+      "cancelled": "Call cancelled",
+      "unanswered": "No answer",
+      "declined": "Declined",
+      "busy": "Busy",
+      "failed": "The call dropped",
+      "missed": "Missed call"
+    },
+    "errors": {
+      "call_media": "The microphone or camera could not be used. Check the permissions.",
+      "call_relay": "The call relay could not be reached.",
+      "call_failed": "The call could not connect."
     }
   }
 }

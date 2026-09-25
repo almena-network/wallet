@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ChevronLeftIcon, SyncIcon } from "../components/icons";
+import { ChevronLeftIcon, PhoneIcon, SyncIcon, VideoIcon } from "../components/icons";
+import { calls, callsSupported, useCall } from "../call";
 import { useI18n } from "../i18n";
 import {
   MESSAGE_CHARS,
@@ -39,6 +40,7 @@ export function ConversationScreen({ id, onBack, onContact }: ConversationScreen
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const call = useCall();
 
   const load = useCallback(
     () =>
@@ -122,6 +124,8 @@ export function ConversationScreen({ id, onBack, onContact }: ConversationScreen
   }
 
   const contact = conversation?.contact;
+  // Once they have answered the invitation, and not while another call is on.
+  const callable = !!contact && !contact.pending && (call === null || call.phase === "ended");
 
   return (
     <div className="screen screen--conversation">
@@ -141,6 +145,28 @@ export function ConversationScreen({ id, onBack, onContact }: ConversationScreen
           </span>
           <span className="conversation__name">{contact?.name ?? ""}</span>
         </button>
+        {callsSupported ? (
+          <>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => contact && void calls.start(id, contact.name, "audio")}
+              disabled={!callable}
+              aria-label={t.calls.audio}
+            >
+              <PhoneIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => contact && void calls.start(id, contact.name, "video")}
+              disabled={!callable}
+              aria-label={t.calls.video}
+            >
+              <VideoIcon />
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           className="icon-button"

@@ -21,10 +21,13 @@
 //! - [`photo`]: the picture the wallet shows for its own identity.
 //! - [`push`]: the device token the mediator notifies while the wallet is not
 //!   running.
+//! - [`call`]: the signalling of calls, and the TURN credentials they are
+//!   relayed with (`SPEC.md` §3).
 //!
 //! Everything here needs the wallet open: every key and the state key come
 //! from the seed, which is only held while it is.
 
+mod call;
 mod chat;
 mod contacts;
 mod conversation;
@@ -39,7 +42,7 @@ use almena_didcomm::{unpack, InMemorySecrets, Message};
 use serde::{Serialize, Serializer};
 use serde_json::json;
 use tauri::async_runtime::Mutex;
-use tauri::{Manager, Runtime, State};
+use tauri::{Emitter, Manager, Runtime, State};
 use zeroize::Zeroizing;
 
 use crate::identity::Held;
@@ -89,6 +92,8 @@ pub enum MessagingError {
     Storage,
     /// The system would not supply randomness.
     Entropy,
+    /// The mediator offers no TURN relay, so no call can be placed.
+    CallsUnavailable,
 }
 
 impl MessagingError {
@@ -110,6 +115,7 @@ impl MessagingError {
             Self::Unreadable => "messaging_unreadable",
             Self::Storage => "messaging_storage",
             Self::Entropy => "messaging_entropy",
+            Self::CallsUnavailable => "messaging_calls_unavailable",
         }
     }
 }
@@ -665,6 +671,52 @@ pub async fn profile_write<R: Runtime>(
     Ok(Profile { name, unreached })
 }
 
+/// The TURN servers a call is relayed through, as `RTCIceServer`s, from this
+/// wallet's own mediator. Asked for before each call: the credentials expire.
+#[tauri::command]
+pub async fn call_ice_servers<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+) -> Result<serde_json::Value, MessagingError> {
+    let seed = seed(&held)?;
+    let mediation = state::read(&app, &seed)?
+        .mediation
+        .ok_or(MessagingError::NotConnected)?;
+    let mediator = Mediator::resolve(&mediation.mediator).await?;
+    let inbox = Peer::inbox(&seed, &mediator.did)?;
+    mediator.ensure(&inbox, None).await?;
+    call::ice_servers(&mediator, &inbox).await
+}
+
+/// Says `signal` to the contact of the conversation `id`, in the call `call`
+/// — none for an offer, which starts one. Returns the call's id.
+///
+/// Reads the state without the [`Gate`]: nothing is written, and a call must
+/// not wait for a sync.
+#[tauri::command]
+pub async fn call_send<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    held: State<'_, Held>,
+    id: String,
+    call: Option<String>,
+    signal: call::Signal,
+) -> Result<String, MessagingError> {
+    let seed = seed(&held)?;
+    let state = state::read(&app, &seed)?;
+    let mediation = state
+        .mediation
+        .as_ref()
+        .ok_or(MessagingError::NotConnected)?;
+    let relationship = find(&state.relationships, &id)?;
+    if relationship.pending {
+        return Err(MessagingError::Pending);
+    }
+    let message = call::message(call.as_deref(), &signal)?;
+    let call = message.thid().to_owned();
+    deliver(&seed, mediation, relationship, message).await?;
+    Ok(call)
+}
+
 /// Registers the lock the commands that change the state hold, and the live
 /// session.
 pub fn manage<R: Runtime>(app: &tauri::AppHandle<R>) {
@@ -766,6 +818,8 @@ struct Outcome {
     /// Relationships opened, confirmed or renamed.
     changed: usize,
     arrivals: Vec<Arrival>,
+    /// Call signals, handed to the interface as they are.
+    calls: Vec<call::Incoming>,
 }
 
 /// Picks up and handles what is waiting: the protocol half of
@@ -901,6 +955,24 @@ async fn handle(
                 }
                 received.push(id);
             }
+            call::OFFER | call::ANSWER | call::HANGUP => {
+                let Some(relationship) = state.relationships.iter().find(|r| to.contains(&r.ours))
+                else {
+                    received.push(id);
+                    continue;
+                };
+                if message.from.as_deref() != Some(relationship.theirs.as_str()) {
+                    continue;
+                }
+                if let Some((call, signal)) = call::read(&message, almena_didcomm::message::now()) {
+                    outcome.calls.push(call::Incoming {
+                        contact: conversation::id(&relationship.ours),
+                        call,
+                        signal,
+                    });
+                }
+                received.push(id);
+            }
             chat::TEXT | chat::PROFILE => {
                 let Some(relationship) = state
                     .relationships
@@ -985,6 +1057,9 @@ fn apply<R: Runtime>(
 ) -> Result<Applied, MessagingError> {
     let mut changed = outcome.changed;
     let mut fresh = Vec::new();
+    for incoming in outcome.calls {
+        let _ = app.emit(call::SIGNAL, incoming);
+    }
     let mut failure = None;
     for arrival in outcome.arrivals {
         let Some(relationship) = state
@@ -1210,6 +1285,25 @@ mod tests {
             .await
             .expect("pickup status");
         assert_eq!(waiting.message_count, 0);
+    }
+
+    /// Needs the mediator started with `ALMENA_TURN_URLS` and
+    /// `ALMENA_TURN_SECRET` set.
+    #[tokio::test]
+    #[ignore = "needs a mediator running, with TURN"]
+    async fn a_mediated_wallet_gets_turn_credentials() {
+        let seed = [12u8; 64];
+        let mediation = mediate(&seed, &address()).await.expect("mediation");
+        let mediator = Mediator::resolve(&mediation.mediator).await.unwrap();
+        let inbox = Peer::inbox(&seed, &mediator.did).unwrap();
+
+        let servers = call::ice_servers(&mediator, &inbox)
+            .await
+            .expect("TURN credentials");
+        let server = &servers[0];
+        assert!(server["urls"][0].as_str().unwrap().starts_with("turn"));
+        assert!(server["username"].as_str().unwrap().contains(':'));
+        assert!(server["credential"].is_string());
     }
 
     /// Two wallets on the same mediator: Bob accepts Alice's invitation, and

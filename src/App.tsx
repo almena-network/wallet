@@ -10,6 +10,7 @@ import { useAutoLock, useIdle } from "./autolock";
 import { useBackdrop } from "./backdrop";
 import { invitationKind, useDeepLinks } from "./links";
 import { useLive } from "./live";
+import { calls, useCall } from "./call";
 import { useNotificationPrivacy } from "./notify";
 import { useBackInSight } from "./lock";
 import { usePlatform } from "./platform";
@@ -24,6 +25,7 @@ import {
   openVaultWithDevice,
   useVault,
 } from "./vault";
+import { CallScreen } from "./screens/CallScreen";
 import { DeviceLockScreen } from "./screens/DeviceLockScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LinkSheet, type LinkOrigin } from "./screens/LinkSheet";
@@ -85,8 +87,13 @@ export default function App() {
   useDeepLinks((url) => void openLink(url, "link"));
   // A conversation to open the Messages tab on, when a link led to one.
   const [conversation, setConversation] = useState<string | null>(null);
-  // Messages arrive live while an identity is open and the wallet is seen.
-  useLive(identity !== null);
+  // A call, placed or ringing, while an identity is open.
+  const call = useCall();
+  const inCall = call !== null && call.phase !== "ended";
+  useEffect(() => (identity !== null ? calls.attach() : undefined), [identity]);
+  // Messages arrive live while an identity is open and the wallet is seen —
+  // and during a call even when it is not, or its hang-up would not arrive.
+  useLive(identity !== null, inCall);
   // And while it is not running, the mediator notifies this device.
   useEffect(() => {
     if (identity !== null) {
@@ -112,7 +119,8 @@ export default function App() {
   // left behind for another app — armed only while a wallet is open. Coming
   // back is when the clock is asked the time, for a webview whose timer the
   // system throttled or froze while nobody could see it.
-  const catchUp = useIdle(autoLock, identity !== null, lockNow);
+  // Nobody touches a wallet while they talk: a call holds the clock.
+  const catchUp = useIdle(autoLock, identity !== null && !inCall, lockNow);
   useBackInSight(catchUp);
 
   // Signing out is not locking: the record itself goes, and the phrase is what
@@ -352,6 +360,8 @@ export default function App() {
       {keypad || cameraPreview ? null : (
         <LiquidTabBar label={t.nav.label} tabs={tabs} active={route} onSelect={select} />
       )}
+
+      {call ? <CallScreen view={call} /> : null}
 
       {link ? (
         <LinkSheet

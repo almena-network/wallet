@@ -28,10 +28,13 @@
 			</array>
 		</dict>
 	</dict>
-	<!-- Why the camera is asked for, which iOS shows when it asks. The scanner
-	     reads a code and nothing else. -->
+	<!-- Why the camera and the microphone are asked for, which iOS shows when
+	     it asks: the scanner reads a code, and calls carry them to the
+	     contact being called, nowhere else. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Almena Wallet uses the camera to read QR codes.</string>
+	<string>Almena Wallet uses the camera to read QR codes and for video calls.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Almena Wallet uses the microphone for calls.</string>
 	<!-- Why Face ID is asked for. Without it iOS will not let the wallet use
 	     the face at all, and the device key's `require-user-presence` goes
 	     straight to the iPhone passcode instead of trying Face ID first. -->

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 /**
@@ -11,8 +11,14 @@ import { invoke } from "@tauri-apps/api/core";
  * and data spent on nobody, and the system closes it anyway; the mediator's
  * transports assume exactly this (its `docs/didcomm.md` §5). Coming back to
  * the front starts a new one, since the old may have died unannounced.
+ *
+ * `keep` holds it open in the back as well — during a call, whose signals
+ * arrive the same way and must not wait for the wallet to be looked at.
  */
-export function useLive(open: boolean) {
+export function useLive(open: boolean, keep = false) {
+  const kept = useRef(keep);
+  kept.current = keep;
+
   useEffect(() => {
     if (!open) {
       return;
@@ -20,7 +26,7 @@ export function useLive(open: boolean) {
     const follow = () => {
       if (document.visibilityState === "visible") {
         void invoke("live_start").catch(() => undefined);
-      } else {
+      } else if (!kept.current) {
         void invoke("live_stop").catch(() => undefined);
       }
     };
@@ -31,4 +37,11 @@ export function useLive(open: boolean) {
       void invoke("live_stop").catch(() => undefined);
     };
   }, [open]);
+
+  // A call that ended while the wallet was in the back lets the socket go.
+  useEffect(() => {
+    if (open && !keep && document.visibilityState !== "visible") {
+      void invoke("live_stop").catch(() => undefined);
+    }
+  }, [open, keep]);
 }
