@@ -64,6 +64,16 @@ const STEADY: Duration = Duration::from_secs(60);
 pub struct Live(Mutex<Option<JoinHandle<()>>>);
 
 impl Live {
+    /// Starts a session, ending the one running, if any.
+    pub fn restart<R: Runtime>(&self, app: tauri::AppHandle<R>) {
+        self.stop();
+        let running = tauri::async_runtime::spawn(run(app));
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(running);
+    }
+
     /// Ends the session, if there is one.
     pub fn stop(&self) {
         let running = self
@@ -86,12 +96,7 @@ pub fn live_start<R: Runtime>(
     live: State<'_, Live>,
 ) -> Result<(), MessagingError> {
     seed(&held)?;
-    live.stop();
-    let running = tauri::async_runtime::spawn(run(app));
-    *live
-        .0
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(running);
+    live.restart(app);
     Ok(())
 }
 

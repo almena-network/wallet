@@ -270,6 +270,11 @@ pub async fn mediator_connect<R: Runtime>(
     state.mediation = Some(mediation);
     state::write(&app, &seed, &state)?;
 
+    // Live delivery gave up for want of a mediation, or follows the old one:
+    // without this nothing arrives live — a call included — until the wallet
+    // next comes to the front.
+    app.state::<live::Live>().restart(app.clone());
+
     Ok(state.mediation.as_ref().into())
 }
 
